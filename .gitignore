@@ -1,0 +1,10 @@
+main/.vscode/extensions.json
+main/platformio.ini
+main/.pio
+main/.vscode/.browse.c_cpp.db*
+main/.vscode/c_cpp_properties.json
+main/.vscode/launch.json
+main/.vscode/ipch
+main/include/README
+main/lib/README
+main/test/README
