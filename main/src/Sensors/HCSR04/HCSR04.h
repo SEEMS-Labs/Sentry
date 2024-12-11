@@ -2,7 +2,17 @@
 #ifndef HCSR04_H
 #define HCSR04_H
 
-#include "SensorInterface.h"
+#include "Sensors\SensorInterface.h"
+
+/**
+ * Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
+ */
+#define PRESENCE_THRESHOLD_PASSED 0x40
+
+/**
+ * Mask representing that the Obstacle Detection Threshold of an HCSR04 Sensor has been passed.
+ */
+#define OBSTCALE_THRESHOLD_PASSED 0x80
 
 class HCSR04 : public SensorInterface {
 
@@ -10,27 +20,47 @@ class HCSR04 : public SensorInterface {
         /**
          * Field that serves as an identifer for this HC-SR04.
          */
-        int id;
+        const int id;
         
         /**
          * Trigger pin of this HC-SR04.
          */
-        int trigger;
+        const int trigger;
 
         /**
          * Echo pin of this HC-SR04.
          */
-        int echo;
+        const int echo;
+
+        /**
+         * The distance from the sensor (in inches) that an obstacle must be to be "detected".
+         */
+        float obstacleDetectionThreshold;
+
+        /**
+         * The distance from the sensor (in inches) that an object/person must be to be "detected".
+         */
+        float presenceDetectionThreshold = 24;
 
         /**
          * Quantifies if this sensor is on or not (should be polled or not).
          */
-        bool active;
+        bool active = false;
+
+        /**
+         * Index into the distance buffer pointing to the last distance measured.
+         */
+        int distIndex = 0;
+        
+        /**
+         * Size of distance buffer.
+         */
+        static constexpr int bufferSize = 256;
 
         /**
          * Buffer of past distances measured.
          */
-        float pastDistances[256];
+        float pastDistances[bufferSize];
 
     public:
         /**
@@ -38,18 +68,19 @@ class HCSR04 : public SensorInterface {
          * @param trigger The trigger pin of this sensor.
          * @param echo The echo pin of this sensor.
          * @param id The unique Id for this ultrasonic sensor.
+         * @param obstacleDetectionThreshold The distance from the sensor (in inches) that an obstacle must be to be "detected".
          */
-        HCSR04(int trigger, int echo, int id);
+        HCSR04(int trigger, int echo, int id, int obstacleDetectionThreshold) : trigger(trigger), echo(echo), id(id), obstacleDetectionThreshold(obstacleDetectionThreshold) {};
 
         /**
-         * Initializes the sensor's pin connections.
+         * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
          */
         void init() override;
 
         /**
          * Poll the sensor and store the data.
          */
-        void readSensor() override;
+        float readSensor() override;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -62,17 +93,41 @@ class HCSR04 : public SensorInterface {
         void disable() override;
 
         /**
-         * Signal that a sensor has passed its threshold(s) so that action can be taken.
-         * @return True if the sensor has passed its threshold, false othewise.
+         * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.
+         * @return A byte where the Bit 7 (MSB) represents ths obstacle detection threshold 
+         * and Bit 6 representes the presence detection threshold. A bit set to 1 indicates 
+         * the distance threshold has been breached and a bit set to 0 indicates the opposite.
          */
-        bool passedThreshold() override;
+        uint8_t passedThreshold() override;
 
         /**
-         * Take the avarage of a buffer that holds past sensor data.
-         * @return The average value of a buffer which stores recent past sensor data.
+         * Take the avarage of this sensors past distances buffer.
+         * @return The average value of this sensors past distnaces.
          */
         float averageBuffer() override;
 
+        /**
+         * Retrieve this ultrasonic sensors id.
+         * @return The id number of this ultrasonic sensor.
+         */
+        int identify();
+
+        /**
+         * Check if this sensor is active or not.
+         * @return True if sensor is active, false otherwise.
+         */
+        bool isActive();
+
+        /**
+         * Set this sensors obstacle detection threshold.
+         * @param threshold The new threshold to be integrated.
+         */
+        void setObstacleDetectionThreshold(float threshold);
+
+        /**
+         * Retrieve this sensors obstacle detection threshold.
+         */
+        float getObstacleDetectionThreshold();
 };
 
 // End include guard.

@@ -2,16 +2,21 @@
 #ifndef MIC_H
 #define MIC_H
 
-#include "SensorInterface.h"
+#include "Sensors/SensorInterface.h"
 
 class Microphone : public SensorInterface {
 
     private:
 
         /**
-         * Analog Input pin of this microphone.
+         * Analog Output pin of this microphone.
          */
-        int input;
+        int output;
+
+        /**
+         * The noise threshold for this microphone.
+         */
+        float noiseThreshold;
 
         /**
          * Sampling Rate to be used in taking readings.
@@ -19,23 +24,27 @@ class Microphone : public SensorInterface {
         float samplingRate;
 
         /**
-         * Buffer of past distances measured.
+         * Buffer of past noise levels measured.
          */
         float noiseBuffer[50];
 
     public:
         /**
-         * Defines the sensors pins and connects them to the ESP32, and sets the thresholds of a sensor.
-         * @param type the type of sensor being created.
-         * @param pins An array of the pin numbers that the sensor is attached to on the ESP32.
-         * @param thresholds[] An array holding all the thresholds relating to the Sensor.
+         * Defines the sensors pins and connects them to the ESP32, and sets the noise threshold.
+         * @param output The analog output pin of this microphone.
+         * @param noisethreshold The noise threshold of this microphone.
          */
-        void init(SensorType type, int pins[], int thresholds[]) override;
+        Microphone(int output, int noisethreshold) : output(output), noiseThreshold(noiseThreshold) {};
+
+        /**
+         * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
+         */
+        void init() override;
 
         /**
          * Poll the sensor and store the data.
          */
-        void readSensor() override;
+        float readSensor() override;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -51,7 +60,7 @@ class Microphone : public SensorInterface {
          * Signal that a sensor has passed its threshold(s) so that action can be taken.
          * @return True if the sensor has passed its threshold, false othewise.
          */
-        bool passedThreshold() override;
+        uint8_t passedThreshold() override;
 
         /**
          * Take the avarage of a buffer that holds past sensor data.

@@ -2,6 +2,8 @@
 #ifndef SENSOR_INTERFACE_H
 #define SENSOR_INTERFACE_H
 
+#include <cstdint>
+
 /**
  * Specifies type of sensor being dealt with.
  */
@@ -29,17 +31,14 @@ class SensorInterface {
     public:
 
         /**
-         * Defines the sensors pins and connects them to the ESP32, and sets the thresholds of a sensor.
-         * @param type the type of sensor being created.
-         * @param pins An array of the pin numbers that the sensor is attached to on the ESP32.
-         * @param thresholds[] An array holding all the thresholds relating to the Sensor.
+         * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
          */
         virtual void init() = 0;
 
         /**
          * Poll the sensor and store the data.
          */
-        virtual void readSensor() = 0;
+        virtual float readSensor() = 0;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -52,10 +51,11 @@ class SensorInterface {
         virtual void disable() = 0;
 
         /**
-         * Signal that a sensor has passed its threshold(s) so that action can be taken.
-         * @return True if the sensor has passed its threshold, false othewise.
+         * Signal that a sensor has passed its threshold(s).
+         * @return A byte where each bit set to 1 represents a sensor threshold that has been passed
+         * and each bit set to 0 the opposite.
          */
-        virtual bool passedThreshold() = 0;
+        virtual uint8_t passedThreshold() = 0;
 
         /**
          * Take the avarage of a buffer that holds past sensor data.
