@@ -15,15 +15,17 @@
 #define API_KEY "AIzaSyAGnxeU6342_TcjpmTKPT_WjB4AVTODfMk"
 #define DATABASE_URL "https://seems-hub-default-rtdb.firebaseio.com/"
 
+// Fucntions from example.
 void authHandler();
 void printResult(AsyncResult &aResult);
 void printError(int code, const String &msg);
 
+// Constructs from example.
 DefaultNetwork network;
 UserAuth user_auth(API_KEY, USER_EMAIL, USER_PASSWORD);
 FirebaseApp app;
 WiFiClientSecure ssl_client;
-using AsyncClient = AsyncClientClass;
+using AsyncClient = AsyncClientClass;                   // Equivalent to "typedef", just more clear.
 AsyncClient aClient(ssl_client, getNetwork(network));
 RealtimeDatabase Database;
 AsyncResult aResult_no_callback;
@@ -77,7 +79,13 @@ object_t json1, json2, json3, json4, json;
 JsonWriter writer;
 void loop() {
     Serial.println("We looping");
-    authHandler();
+    //authHandler();
+
+    // Check if reauthentication is required
+    if (!app.ready()) {
+        Serial.println("App not ready. Reauthenticating...");
+        authHandler();
+    }
     Database.loop();
 
     writer.create(json1, "airQuality", reading++);
@@ -92,8 +100,11 @@ void loop() {
     if (status_loop) Serial.println("ok");
     else printError(aClient.lastError().code(), aClient.lastError().message());
 
-    if(((int) reading )%2 == 0) delay(0.02 * ONE_SECOND);
-    else delay(0.05 * ONE_SECOND);
+    uint32_t rand = esp_random();
+    if(rand % 5 == 0) delay(2 * ONE_SECOND);
+    else if(rand % 3 == 0) delay(0.1 * ONE_SECOND);
+    else if (rand % 2 == 0) delay(0.01 * ONE_SECOND);
+    else delay(ONE_SECOND);
 
 }
 
