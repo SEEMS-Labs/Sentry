@@ -3,7 +3,19 @@
 #include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
 
-#include <sentryConfigInfo.h>
+#define BAUD_RATE 115200
+#define ONE_SECOND 1000
+
+//#define WIFI_SSID "WhiteSky-KnightsCircle"
+//#define WIFI_PASSWORD "d9wk6xfg"
+#define WIFI_SSID "NETGEAR66"
+#define WIFI_PASSWORD "dynamicbug829"
+
+#define USER_EMAIL "es849112@ucf.edu"
+#define USER_PASSWORD "rCpnKBR4ZhtefmL"
+
+#define API_KEY "AIzaSyAGnxeU6342_TcjpmTKPT_WjB4AVTODfMk"
+#define DATABASE_URL "https://seems-hub-default-rtdb.firebaseio.com/"
 
 // Fucntions from example.
 void authHandler();
