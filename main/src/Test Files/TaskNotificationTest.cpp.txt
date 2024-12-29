@@ -1,0 +1,86 @@
+
+
+#include <Arduino.h>
+#include <FirebaseClient.h>
+
+static void IRAM_ATTR timer_isr_handler();
+
+// CLASS W TASK.
+class Controller {
+
+    private:
+        int basic = 0;
+        static void controlTask(void *pvParameters) {
+            Controller *controller = static_cast<Controller *>(pvParameters);
+            const TickType_t maxBlockTime = pdMS_TO_TICKS(1000 + 10);
+            uint32_t eventsToProcess;
+            controller->controlTaskLogic(maxBlockTime, eventsToProcess);
+        }
+
+        void controlTaskLogic(TickType_t mbt, uint32_t e2p) {
+            for(;;) {
+                e2p = ulTaskNotifyTake(pdTRUE, mbt);
+                if(e2p != 0) {
+                    basic += 1;
+                    Serial.printf("Event Processed: %d\n", basic);
+                }
+                else Serial.println("Event not processed...");
+            }
+        }
+
+    public:
+        inline static TaskHandle_t controlTaskHandle = NULL;
+        void init() {
+            // Declare control task.
+            xTaskCreatePinnedToCore(
+                &controlTask,       // Task address
+                "control",       // Task name
+                2000,               // Number of bytes to reserve for the task
+                this,               // Parameters to reserve for the task
+                2,                  // Priority of the task
+                &controlTaskHandle,   // Handle to the task
+                1                   // Core to select
+            );
+        }
+
+};
+
+// CLASS WITH INTERRUPT.
+class ISR_HANDLER {
+
+    private:
+        hw_timer_t *testTimer;
+
+    public:
+        void init() {
+            testTimer = timerBegin(0, 80, true);
+            timerAttachInterrupt(testTimer, timer_isr_handler, true);
+            timerAlarmWrite(testTimer, 1000000, true);
+            timerAlarmEnable(testTimer);
+        }
+
+};
+
+// Prototypes.
+void begin();
+
+ISR_HANDLER isr;
+Controller ctrl;
+
+void setup() {
+    Serial.begin(115200);
+    begin();
+}
+
+void loop() {}
+
+void begin() {
+    ctrl.init();
+    isr.init();
+}
+
+static void IRAM_ATTR timer_isr_handler() {
+    BaseType_t higherPriorityWasAwoken = pdFALSE;
+    vTaskNotifyGiveFromISR(Controller::controlTaskHandle, &higherPriorityWasAwoken);
+    portYIELD_FROM_ISR(higherPriorityWasAwoken);
+}

@@ -1,19 +1,16 @@
 #include "mic.h"
 
 /**
- * Defines the sensors pins and connects them to the ESP32, and sets the thresholds of a sensor.
- * @param type the type of sensor being created.
- * @param pins An array of the pin numbers that the sensor is attached to on the ESP32.
- * @param thresholds[] An array holding all the thresholds relating to the Sensor.
+ * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
  */
-void Microphone::init(SensorType type, int pins[], int thresholds[]) {
+void Microphone::init() {
 }
 
 /**
  * Poll the sensor and store the data.
  */
-void Microphone::readSensor() {
-
+float Microphone::readSensor(TickType_t xMaxBlockTime) {
+    return -1.0;
 }
 
 /**
@@ -34,8 +31,8 @@ void Microphone::disable() {
  * Signal that a sensor has passed its threshold(s) so that action can be taken.
  * @return True if the sensor has passed its threshold, false othewise.
  */
-bool Microphone::passedThreshold() {
-
+uint8_t Microphone::passedThreshold() {
+    return -1;
 }
 
 /**
@@ -43,5 +40,5 @@ bool Microphone::passedThreshold() {
  * @return The average value of a buffer which stores recent past sensor data.
  */
 float Microphone::averageBuffer() {
-
+    return -1.0;
 }
