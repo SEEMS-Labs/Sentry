@@ -2,7 +2,9 @@
 #ifndef HCSR04_H
 #define HCSR04_H
 
-#include "Sensors\SensorInterface.h"
+// Grab libraries. 
+#include "SensorInterface.h"
+#include <Arduino.h>
 
 /**
  * Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
@@ -14,6 +16,9 @@
  */
 #define OBSTCALE_THRESHOLD_PASSED 0x80
 
+/**
+ * Class representing the HC-SR04 Ultrasonic Sensors used as obstacle and presence detectors.
+ */
 class HCSR04 : public SensorInterface {
 
     private:
@@ -62,6 +67,19 @@ class HCSR04 : public SensorInterface {
          */
         float pastDistances[bufferSize];
 
+        unsigned long isrPulseStart = -1; // Stores the time at which the sensor's echo has begun from ISR.
+        unsigned long isrPulseEnd = -1;   // Stores the time at which the sensor's echo has finished from ISR.    
+
+        /**
+         * Pulse this ultrasonic sensor's trigger pin to initiate a measurement.
+         */
+        void pulseTrigger();
+
+        /**
+         * Compute the distance in inches measured by the sensor.
+         */
+        float computeInches();
+
     public:
         /**
          * Defines the sensors pins and connects them to the ESP32, and sets the thresholds of a sensor.
@@ -78,9 +96,10 @@ class HCSR04 : public SensorInterface {
         void init() override;
 
         /**
-         * Poll the sensor and store the data.
+         * Poll the sensor and store the data. This must only be called from within a task.
+         * @param xMaxBlockTime The maximum time allotted to read a sensor.
          */
-        float readSensor() override;
+        float readSensor(TickType_t xMaxBlockTime) override;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -128,7 +147,21 @@ class HCSR04 : public SensorInterface {
          * Retrieve this sensors obstacle detection threshold.
          */
         float getObstacleDetectionThreshold();
+
+        /**
+         * For purposes of sensor reading in the appropriate ISR from the Sensor Manager.
+         * Sets the start time of the echo pulse once it begins.
+         * @param start This is the start time of the echo pulse once this sensor has begun measuring.
+         */
+        void setISRStartPulse(ulong start);
+
+        /**
+         * For purposes of sensor reading in the appropriate ISR from the Sensor Manager.
+         * Sets the end time of the echo pulse once it begins.
+         * @param end This is the end time of the echo pulse once this sensor has begun measuring.
+         */
+        void setIRSEndPulse(ulong end);
 };
 
 // End include guard.
-#endif
+#endif /*HCSR04.h*/

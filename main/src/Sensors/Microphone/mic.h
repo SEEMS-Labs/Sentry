@@ -2,7 +2,8 @@
 #ifndef MIC_H
 #define MIC_H
 
-#include "Sensors/SensorInterface.h"
+#include "SensorInterface.h"
+#include <Arduino.h>
 
 class Microphone : public SensorInterface {
 
@@ -44,7 +45,7 @@ class Microphone : public SensorInterface {
         /**
          * Poll the sensor and store the data.
          */
-        float readSensor() override;
+        float readSensor(TickType_t xMaxBlockTime) override;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -71,4 +72,4 @@ class Microphone : public SensorInterface {
 };
 
 // End include guard.
-#endif
+#endif /*mic.h*/

@@ -1,122 +1,33 @@
 #include <Arduino.h>
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <FirebaseClient.h>
 
-#include <sentryConfigInfo.h>
+#include "sentryConfigInfo.h"
+#include "Device.h"
 
-// Fucntions from example.
-void authHandler();
-void printResult(AsyncResult &aResult);
-void printError(int code, const String &msg);
-
-// Constructs from example.
-DefaultNetwork network;
-UserAuth user_auth(API_KEY, USER_EMAIL, USER_PASSWORD);
-FirebaseApp app;
-WiFiClientSecure ssl_client;
-using AsyncClient = AsyncClientClass;                   // Equivalent to "typedef", just more clear.
-AsyncClient aClient(ssl_client, getNetwork(network));
-RealtimeDatabase Database;
-AsyncResult aResult_no_callback;
+// Create Sentry.
+Device sentry;
+void testDrive(Device sentry);
 
 void setup() {
-    Serial.begin(BAUD_RATE);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    Serial.print("Connecting to Wi-Fi");
-    while (WiFi.status() != WL_CONNECTED) {
-        Serial.print(".");
-        delay(300);
-    }
-    Serial.println();
-    Serial.print("Connected with IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.println();
-
-    Firebase.printf("Firebase Client v%s\n", FIREBASE_CLIENT_VERSION);
-
-    Serial.println("Initializing app..."); 
-    ssl_client.setInsecure();
-
-    initializeApp(aClient, app, getAuth(user_auth), aResult_no_callback);
-    authHandler();
-
-    // Binding the FirebaseApp for authentication handler.
-    // To unbind, use Database.resetApp();
-    app.getApp<RealtimeDatabase>(Database);
-
-    Database.url(DATABASE_URL);
-
-    // In case setting the external async result to the sync task (optional)
-    // To unset, use unsetAsyncResult().
-    aClient.setAsyncResult(aResult_no_callback);
-
-    // Push bool
-    Serial.print("Push bool... ");
-    //String name = Database.set<bool>(aClient, "/alert/noise", true);
-    bool status = Database.set<bool>(aClient, "/alert/noise", true);
-    if (status)
-        Serial.println("ok");
-    else
-        printError(aClient.lastError().code(), aClient.lastError().message());
-
+    Serial.begin(BAUD_RATE);    // Serial.
+    sentry.begin();             // Start the sentry.
+    testDrive(sentry);          // Test the drive system.
+    vTaskDelete(NULL);          // End setup.
 } 
 
-float reading = 0.6;
-bool status_loop;
-object_t json1, json2, json3, json4, json;
-JsonWriter writer;
-void loop() {
-    Serial.println("We looping");
-    //authHandler();
+void loop() {}
 
-    // Check if reauthentication is required
-    if (!app.ready()) {
-        Serial.println("App not ready. Reauthenticating...");
-        authHandler();
-    }
-    Database.loop();
+void testDrive(Device sentry) {
+    // Delay to wait for floor placement.
+    delay(pdMS_TO_TICKS(15 * 1000));
 
-    writer.create(json1, "airQuality", reading++);
-    writer.create(json2, "humidity", reading++);
-    writer.create(json3, "pressure", reading++); 
-    writer.create(json4, "temperature", reading++);
-    writer.join(json, 4, json1, json2, json3, json4);
+    // Move forward for 4 s. Brake.
+    sentry.getDriver().moveForward();
+    delay(pdMS_TO_TICKS(4 * ONE_SECOND));
+    sentry.getDriver().stop(BRAKE);
 
-    Serial.println("updating readings... ");
-
-    status_loop = Database.set<object_t>(aClient, "readings/", json);
-    if (status_loop) Serial.println("ok");
-    else printError(aClient.lastError().code(), aClient.lastError().message());
-
-    uint32_t rand = esp_random();
-    if(rand % 5 == 0) delay(2 * ONE_SECOND);
-    else if(rand % 3 == 0) delay(0.1 * ONE_SECOND);
-    else if (rand % 2 == 0) delay(0.01 * ONE_SECOND);
-    else delay(ONE_SECOND);
-
-}
-
-void authHandler() {
-    // Blocking authentication handler with timeout
-    unsigned long ms = millis();
-    while (app.isInitialized() && !app.ready() && millis() - ms < 120 * 1000) {
-        // The JWT token processor required for ServiceAuth and CustomAuth authentications.
-        // JWT is a static object of JWTClass and it's not thread safe.
-        // In multi-threaded operations (multi-FirebaseApp), you have to define JWTClass for each FirebaseApp,
-        // and set it to the FirebaseApp via FirebaseApp::setJWTProcessor(<JWTClass>), before calling initializeApp.
-        JWT.loop(app.getAuth());
-        printResult(aResult_no_callback);
-    }
-}
-
-void printResult(AsyncResult &aResult) {
-    if (aResult.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.appEvent().message().c_str(), aResult.appEvent().code());
-    if (aResult.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
-    if (aResult.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
-}
-
-void printError(int code, const String &msg) {
-    Firebase.printf("Error, msg: %s, code: %d\n", msg.c_str(), code);
+    // Move backwards for 2 s. Coast to stop.
+    sentry.getDriver().moveBackward();
+    delay(pdMS_TO_TICKS(ONE_SECOND));
+    sentry.getDriver().stop(COAST);
 }

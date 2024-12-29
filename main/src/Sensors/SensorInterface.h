@@ -3,6 +3,7 @@
 #define SENSOR_INTERFACE_H
 
 #include <cstdint>
+#include <Arduino.h>
 
 /**
  * Specifies type of sensor being dealt with.
@@ -36,9 +37,10 @@ class SensorInterface {
         virtual void init() = 0;
 
         /**
-         * Poll the sensor and store the data.
+         * Poll the sensor and store the data. This must be called from a task.
+         * @param xMaxBlockTime The maximum total time a sensor reading should be attempted before timeout.
          */
-        virtual float readSensor() = 0;
+        virtual float readSensor(TickType_t xMaxBlockTime) = 0;
 
         /**
          * Mark a sensor as relevant for output collection.

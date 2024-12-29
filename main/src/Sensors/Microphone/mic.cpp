@@ -1,4 +1,4 @@
-#include "Sensors/Microphone/mic.h"
+#include "mic.h"
 
 /**
  * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
@@ -9,8 +9,8 @@ void Microphone::init() {
 /**
  * Poll the sensor and store the data.
  */
-float Microphone::readSensor() {
-
+float Microphone::readSensor(TickType_t xMaxBlockTime) {
+    return -1.0;
 }
 
 /**
@@ -32,7 +32,7 @@ void Microphone::disable() {
  * @return True if the sensor has passed its threshold, false othewise.
  */
 uint8_t Microphone::passedThreshold() {
-
+    return -1;
 }
 
 /**
@@ -40,5 +40,5 @@ uint8_t Microphone::passedThreshold() {
  * @return The average value of a buffer which stores recent past sensor data.
  */
 float Microphone::averageBuffer() {
-
+    return -1.0;
 }

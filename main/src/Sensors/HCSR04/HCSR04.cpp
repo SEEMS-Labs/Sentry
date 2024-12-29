@@ -13,26 +13,26 @@ void HCSR04::init() {
 /**
  * Poll the sensor and store the data.
  */
-float HCSR04::readSensor() {
+float HCSR04::readSensor(TickType_t xMaxBlockTime) {
     
     // Ensure sensor is active before reading.
     if(!active) return -1.0;
 
     // Pulse trigger for 10 us.
-    digitalWrite(trigger, LOW);
-    delayMicroseconds(5);
-    digitalWrite(trigger, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(trigger, LOW);
+    pulseTrigger();
+    
+    // Wait for pulse to complete.
+    uint32_t pulseFinishedEvent = ulTaskNotifyTake(pdTRUE, xMaxBlockTime);
 
-    // Measure the time between pulses and compute the distance.
-    float duration = pulseIn(echo, HIGH);
-    float distanceInInches = (duration/2) / 74;
+    // Compute, store at return the distance if pulse didn't time out.
+    if(pulseFinishedEvent != 0) {
+        float inches = computeInches();
+        if(distIndex == bufferSize) distIndex = 0;
+        pastDistances[distIndex++] = inches;
+        return inches;
+    }
+    else return -1.0;
 
-    // Return distance measured in inches.
-    if(distIndex == bufferSize) distIndex = 0;
-    pastDistances[distIndex++] = distanceInInches;
-    return distanceInInches;
 }
 
 /**
@@ -56,7 +56,8 @@ void HCSR04::disable() {
  * the distance threshold has been breached and a bit set to 0 indicates the opposite.
  */
 uint8_t HCSR04::passedThreshold() {
-    float distance = readSensor();
+    // Grab the last measured distance.
+    float distance = pastDistances[distIndex];
     uint8_t flag = 0x00;
     if(distance <= obstacleDetectionThreshold) flag |= OBSTCALE_THRESHOLD_PASSED;
     if(distance <= presenceDetectionThreshold) flag |= PRESENCE_THRESHOLD_PASSED;
@@ -102,4 +103,30 @@ void HCSR04::setObstacleDetectionThreshold(float threshold) {
  */
 float HCSR04::getObstacleDetectionThreshold() {
     return obstacleDetectionThreshold;
+}
+
+/**
+ * Pulse this ultrasonic sensors trigger pin to initiate measurements.
+ */
+void HCSR04::pulseTrigger() {
+    // Pulse trigger for 10 us.
+    digitalWrite(trigger, LOW);
+    delayMicroseconds(5);
+    digitalWrite(trigger, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigger, LOW);
+}
+
+float HCSR04::computeInches() {
+    float isrPulseDuration = (isrPulseEnd - isrPulseStart) * 1.0;
+    float distanceInInches = (isrPulseDuration/2) / 74;
+    return distanceInInches;
+}
+
+void HCSR04::setISRStartPulse(ulong start) {
+    isrPulseStart = start;
+}
+
+void HCSR04::setIRSEndPulse(ulong end) {
+    isrPulseEnd = end;
 }
