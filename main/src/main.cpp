@@ -4,8 +4,13 @@
 #include "sentryConfigInfo.h"
 #include "Device.h"
 
+SensorData outgoingData;
+Alerts outgoingAlerts;
+UserSentryConfig incomingUserConfig;
+UserDriveCommands incomingUserCommands;
+
 // Create Sentry.
-Device sentry;
+Device sentry(outgoingData, outgoingAlerts, incomingUserConfig, incomingUserCommands);
 void testDrive(Device sentry);
 
 void setup() {
@@ -22,12 +27,12 @@ void testDrive(Device sentry) {
     delay(pdMS_TO_TICKS(15 * 1000));
 
     // Move forward for 4 s. Brake.
-    sentry.getDriver().moveForward();
+    sentry.get_drive_system().moveBackward();
     delay(pdMS_TO_TICKS(4 * ONE_SECOND));
-    sentry.getDriver().stop(BRAKE);
+    sentry.get_drive_system().stop(BRAKE);
 
     // Move backwards for 2 s. Coast to stop.
-    sentry.getDriver().moveBackward();
+    sentry.get_drive_system().moveBackward();
     delay(pdMS_TO_TICKS(ONE_SECOND));
-    sentry.getDriver().stop(COAST);
+    sentry.get_drive_system().stop(COAST);
 }

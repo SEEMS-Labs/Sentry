@@ -19,23 +19,49 @@ void poll_US_task(void *pvSensorManager) {
     // Initialize task.
     TickType_t xLastWakeTime = xTaskGetTickCount();
     SensorManager *manager = static_cast<SensorManager *>(pvSensorManager);
+
+    // Grab ultrasonic sensors.
+    HCSR04 *frontSensor = manager->fetchUS(F_US_ID);
+    HCSR04 *backSensor = manager->fetchUS(B_US_ID);
+    HCSR04 *leftSensor = manager->fetchUS(L_US_ID);
+    HCSR04 *rightSensor = manager->fetchUS(R_US_ID);
+
+    // Grab data packets.
+    Obstacles *obsDetectionPacket = manager->getObstaclesPacket();
+    Alerts *alertInfoPacket = manager->getAlertsPacket();
+
+    // For testing purposes.
     float readings[4];
     
     // Begin task loop.
     for(;;) {
         Serial.println("Begin Reading Sensors.");
         
-        // Read the front sensor.
-        readings[F_US_ID] = manager->fetchUS(F_US_ID)->readSensor(US_READ_TIME);
+        // Read all 4 sensors on the specified order. At most ~40 ms to read 1 -> ~160ms to read all 4.
+        readings[F_US_ID] = frontSensor->readSensor(US_READ_TIME);
+        readings[B_US_ID] = backSensor->readSensor(US_READ_TIME);
+        readings[L_US_ID] = leftSensor->readSensor(US_READ_TIME);
+        readings[R_US_ID] = rightSensor->readSensor(US_READ_TIME);
 
-        // Read the back sensor.
-        readings[B_US_ID] = manager->fetchUS(B_US_ID)->readSensor(US_READ_TIME);
+        // Check to see if Thresholds were passed.
+        Status frontBreached = frontSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+        Status backBreached = backSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+        Status leftBreached = leftSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+        Status rightBreached = rightSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
 
-        // Read the left sensor.
-        readings[L_US_ID] = manager->fetchUS(L_US_ID)->readSensor(US_READ_TIME);
+        // Notify transmitter for testing firebase transmission.
+        
+        // Notify the appropriate tasks if an obstacles have been detected.
+        if(frontBreached || backBreached || leftBreached || rightBreached) {
+            // Update Obstacle Detection data packet.
+            obsDetectionPacket->frontObstacleDetected = frontSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+            obsDetectionPacket->backObstacleDetected = backSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+            obsDetectionPacket->leftObstacleDetected = leftSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+            obsDetectionPacket->rightObstacleDetected = rightSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
 
-        // Read the right sensor.
-        readings[R_US_ID] = manager->fetchUS(R_US_ID)->readSensor(US_READ_TIME);
+            // Notify tasks.
+            xTaskNotify(move_sentry_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+        }
 
         Serial.printf("Front(%d): %.2f in.\n", manager->fetchUS(F_US_ID)->isActive(), readings[F_US_ID]);
         Serial.printf("Back(%d): %.2f in.\n", manager->fetchUS(B_US_ID)->isActive(), readings[B_US_ID]);
@@ -150,4 +176,16 @@ HCSR04* SensorManager::fetchUS(SensorID id) {
 
     // Return.
     return NULL;
+}
+
+Alerts* SensorManager::getAlertsPacket() {
+    return &alertInfo;
+}
+
+Obstacles* SensorManager::getObstaclesPacket() {
+    return &obstacleInfo;
+}
+
+SensorData* SensorManager::getEnvironmentalDataPacket() {
+    return &environmentalData;
 }

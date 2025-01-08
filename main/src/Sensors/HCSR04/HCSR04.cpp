@@ -55,12 +55,12 @@ void HCSR04::disable() {
  * and Bit 6 representes the presence detection threshold. A bit set to 1 indicates 
  * the distance threshold has been breached and a bit set to 0 indicates the opposite.
  */
-uint8_t HCSR04::passedThreshold() {
+char HCSR04::passedThreshold() {
     // Grab the last measured distance.
     float distance = pastDistances[distIndex];
-    uint8_t flag = 0x00;
-    if(distance <= obstacleDetectionThreshold) flag |= OBSTCALE_THRESHOLD_PASSED;
-    if(distance <= presenceDetectionThreshold) flag |= PRESENCE_THRESHOLD_PASSED;
+    char flag = 0x00;
+    if(distance <= obstacleDetectionThreshold) flag |= OBSTACLE_THRESHOLD_BREACHED;
+    if(distance <= presenceDetectionThreshold) flag |= PRESENCE_THRESHOLD_BREACHED;
     return flag;
 }
 

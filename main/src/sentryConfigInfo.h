@@ -3,6 +3,8 @@
 #ifndef SENTRY_CONFIG_INFO_H
 #define SENTRY_CONFIG_INFO_H
 
+#include <Arduino.h>
+
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
 #define ONE_SECOND 1000
@@ -76,6 +78,178 @@
 #define DEF_HUM_LIM 60      // Default Humidity Level Threshold (in relative humidity %).
 #define DEF_PRESS_LIM 1000  // Default Pressure Level Threshold (in hPa).
 #define DEF_HP_EST_LIM 150  // Default Human Presence Estimation Threshold (in inches).
+
+/*********************************************************
+            COMMUNICATION CONFIGURATION
+**********************************************************/
+#define FB_ENV_DATA_ADDRESS "readings"
+#define FB_ALERTS_ADDRESS   "alerts"
+
+typedef unsigned short int SensorReading;   // Represents sensor values. Data should never require more than 16-bits.
+typedef bool Status;                        // Represents alert status as a boolean.
+
+// Data packet that holds sentry sensor data to be transmitted.
+typedef struct _sensorData SensorData;
+struct _sensorData {
+    SensorReading airQualityIndex;
+    SensorReading temperatureLevel;
+    SensorReading humidityLevel;
+    SensorReading pressureLevel;
+    SensorReading noiseLevel;
+};
+
+// Data packet that holds sentry alert data to be transmitted.
+typedef struct _alertData Alerts;
+struct _alertData {
+    Status airQualityStatus;
+    Status temperatureStatus;
+    Status humidityStatus;
+    Status pressureStatus;
+    Status noiseStatus;
+};
+
+// Data packet that holds sentry obstacle detection data.
+typedef struct _obstcleDetectionData Obstacles;
+struct _obstcleDetectionData {
+    Status frontObstacleDetected;
+    Status backObstacleDetected;
+    Status leftObstacleDetected;
+    Status rightObstacleDetected;
+};
+
+// Represents different types of network connections which the Sentry can have.
+enum class ConnectionType {
+    ct_WIFI,
+    ct_BT,
+    CT_FB
+};
+
+#define FB_USER_ACTIVITY_STATUS_ADDRESS "user_in_app"
+#define FB_USER_CONFIG_ADDRESS "user_config"
+#define FB_USER_CONTROLLER_STATUS_ADDRESS "controller/active"
+#define FB_USER_DPAD_ADDRESS "controller/dpad"
+#define FB_USER_JOYSTICK_ADDRESS "controller/joystick"
+#define FB_USING_DPAD_STATUS_ADDRESS "controller/using_dpad"
+#define FB_USING_JOYSTICK_STATUS_ADDRESS "controller/using_joystick"
+
+// Data packet that holds sentry configuration information transmitted from SentryLink.
+typedef struct _userSentryConfig UserSentryConfig;
+struct _userSentryConfig {
+    SensorReading userAirQualityIndexThreshold;
+    SensorReading userTemperatureLevelThreshold;
+    SensorReading userHumidityLevelThreshold;
+    SensorReading userPressureLevelThreshold;
+    SensorReading userNoiseLevelThreshold;
+};
+
+// Data packet that holds sentry driving instructions from the user transmitted from SentryLink.
+typedef struct _userDriveCommands UserDriveCommands;
+struct _userDriveCommands {
+    Status dpad_Forward;
+    Status dpad_Backward;
+    Status dpad_Left;
+    Status dpad_Right;
+    signed short int joystick_X;    // Expecting signed 16-bit x-coordinates.
+    signed short int joystick_Y;    // Expecting signed 16-bit y-coordinates.
+};
+
+// Represents different types of data received from SentryLink.
+enum class UserDataType {
+    UDT_CONFIG,     // User configuration data.
+    UDT_MVMT,       // User movement command data.
+    UDT_FB_AUTH,    // User Firebase credentials (equivalent to SentryLink credentials).
+    UDT_WIFI_AUTH,  // User Wi-Fi credentials.
+};
+
+#define SERVICE_UUID        "ab3b4f86-a60b-439f-98a0-ebb022b74550"
+#define CHARACTERISTIC_UUID "e8f99c04-2c62-4660-bc38-30e488e1fd5d"
+
+#define DEFAULT_SSID "xUCF"
+#define DEFAULT_PASS "x2025"
+
+#define BLE_INVALID_RX "???"
+
+enum class BLETransmitCode : unsigned short {
+    ble_tx_wait = 0x01,             // Code 1: Waiting for credentials. 
+    ble_tx_creds_valid = 0x02,      // Code 2: Credentials received were valid.
+    ble_tx_creds_invalid = 0x03,    // Code 3: Credentials received were invalid.
+    ble_tx_data_valid = 0x04,       // Code 4: Transmission received was valid.
+    ble_tx_data_invalid = 0x05      // Code 5: Transmission received was invalid.
+};
+
+/*********************************************************
+                    Tasks Handles
+**********************************************************/
+extern TaskHandle_t poll_US_handle;     // Task handle for polling the ultrasonic sensors.
+extern TaskHandle_t poll_mic_handle;    // Task handle for polling the microphone's analog output.
+extern TaskHandle_t poll_bme_handle;    // Task handle for polling the BME688.
+
+extern TaskHandle_t tx_sensor_data_handle;      // Task handle to transmit sentry sensor data to firebase.
+extern TaskHandle_t tx_alerts_handle;           // Task handle to transmit sentry alert data to firebase.
+extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user config and command data from firebase/bluetooth.
+extern TaskHandle_t check_if_data_ready_handle; // Task handle to check periodically if user data is available.
+
+extern TaskHandle_t move_sentry_handle;         // Task handle to control motors.
+extern TaskHandle_t walk_algorithm_handle;      // Task handle to Enhance Random Walk algo.
+
+/*********************************************************
+                Task Notification Values
+**********************************************************/
+typedef uint NotificationValue;     // 32-bit notification values for inter-task notification.
+const NotificationValue OBSTACLE_THRESHOLD_BREACHED = 0x0001;   // Mask representing that the Obstacle Detection Threshold of an HCSR04 Sensor has been passed.
+const NotificationValue PRESENCE_THRESHOLD_BREACHED = 0x0002;   // Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
+
+
+/*********************************************************
+                Sentry Operation States
+**********************************************************/
+
+enum class _power_states {
+    ps_CHARGED,
+    ps_LOW_BATTERY,
+    ps_VERY_LOW_BATTERY,
+    ps_CHARGING
+};
+
+enum class _wake_states {
+    ws_ACTIVE,
+    ws_STANDBY,
+    ws_SHUTDOWN
+};
+
+enum class _data_transmission_states {
+    ds_IDLE,
+    ds_TRANSMIT,
+    ds_RECEIVE
+};
+
+enum class _movement_states {
+    ms_IDLE,
+    ms_MANUAL,
+    ms_AUTONOMOUS,
+    ms_HOMING,
+    ms_EMERGENCY_STOP
+};
+
+enum class _startup_states {
+    ss_PREMIER,     // Representative of Sentry booting w/ no stored network credentials.
+    ss_VALID,       // Representative of Sentry booting w/ valid stored network credentials.
+    ss_INVALID      // Representative of Sentry booting w/ invalid stored network credentials.
+};
+
+enum class _network_connectivity_states {
+    ns_NONE,        // Representative of Sentry having 0 network connections.
+    ns_FB_AND_WF,   // Representative of Sentry being connected to Firebase and Wi-Fi.
+    ns_WF_ONLY,     // Representative of Sentry being connected to Wi-Fi only.
+    ns_BLE          // Representative of Sentry being connected to BLE Client only.
+};
+
+using MovementState = _movement_states;
+using DataTransmissionState = _data_transmission_states;
+using WakeState = _wake_states;
+using PowerState = _power_states;
+using StartupState = _startup_states;
+using ConnectionState = _network_connectivity_states;
 
 // End include gaurd.
 #endif /*sentryConfigInfo.h*/

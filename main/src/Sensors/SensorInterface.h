@@ -2,28 +2,7 @@
 #ifndef SENSOR_INTERFACE_H
 #define SENSOR_INTERFACE_H
 
-#include <cstdint>
 #include <Arduino.h>
-
-/**
- * Specifies type of sensor being dealt with.
- */
-enum class SensorType {
-    /**
-     * Ultrasonic Sensor for presence detection.
-     */
-    ULTRASONIC, 
-
-    /**
-     * Noise Sensor/microphone for noise detection.
-     */
-    NOISE,
-
-    /**
-     * Environmental Sensor for measuring humidity, temperature, air quality, and pressure.
-     */
-    ENVIRONMENTAL
-};
 
 /**
  * Interace for all sensors to be used in SEEMS.
@@ -57,7 +36,7 @@ class SensorInterface {
          * @return A byte where each bit set to 1 represents a sensor threshold that has been passed
          * and each bit set to 0 the opposite.
          */
-        virtual uint8_t passedThreshold() = 0;
+        virtual char passedThreshold() = 0;
 
         /**
          * Take the avarage of a buffer that holds past sensor data.

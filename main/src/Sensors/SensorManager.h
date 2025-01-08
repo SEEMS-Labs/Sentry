@@ -33,10 +33,6 @@ typedef uint32_t milliSeconds;      // Milliseconds.
 #define US_READ_TIME ((milliSeconds) pdMS_TO_TICKS(TTR))    // The maximum time it takes to read an ultrasonic sensor (in ms).
 #define MAX_US_POLL_TIME ((4 * US_READ_TIME) + 10)          // The maximum time it takes to poll all 4 ultrasonic sensors w/ some buffer time.
 
-extern TaskHandle_t poll_US_handle;                // Task handle for polling the ultrasonic sensors.
-extern TaskHandle_t poll_mic_handle;               // Task handle for polling the microphone's analog output.
-extern TaskHandle_t poll_bme_handle;               // Task handle for polling the BME688.
-
 void poll_US_task(void *pvSensorManager);   // Polling ultrasonic sensor task.
 void poll_mic_task(void *pvParameters);     // Polling microphone task.
 void poll_bme_task(void *pvParameters);     // Polling BME688 task.
@@ -53,6 +49,10 @@ class SensorManager {
 
     //*****************************  General Management  *********************************/
     private:
+        Alerts alertInfo;               // Packet of important Sentry alert info for SentryLink.
+        Obstacles obstacleInfo;         // Packet of obstacle detection data for navigation.
+        SensorData environmentalData;   // Packet of important environmental sensor readings for SentryLink.
+
     public:
         SensorManager() : 
             frontUS(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM),
@@ -63,6 +63,9 @@ class SensorManager {
         void initAllSensors();          // Initialize all 6 sensors of the Sentry.
         void attachAllInterrupts();     // Attach all sensor based interrupts of the Sentry.
         void beginAllTasks();           // Begin all sensor based tasks of the Sentry.
+        Alerts *getAlertsPacket();
+        Obstacles *getObstaclesPacket();
+        SensorData *getEnvironmentalDataPacket();
 
     //************************************************************************************/
     

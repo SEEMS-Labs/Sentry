@@ -13,7 +13,7 @@ void BME688::enable() {
 void BME688::disable() {
 }
 
-uint8_t BME688::passedThreshold() {
+char BME688::passedThreshold() {
     return 0;
 }
 

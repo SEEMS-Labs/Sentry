@@ -61,7 +61,7 @@ class Microphone : public SensorInterface {
          * Signal that a sensor has passed its threshold(s) so that action can be taken.
          * @return True if the sensor has passed its threshold, false othewise.
          */
-        uint8_t passedThreshold() override;
+        char passedThreshold() override;
 
         /**
          * Take the avarage of a buffer that holds past sensor data.
