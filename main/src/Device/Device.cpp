@@ -31,5 +31,8 @@ DRV8833 Device::get_drive_system() { return _drive_system; }
 
 void Device::testComms() {
     // Initialize Communication System.
+    Serial.println("Beginning Comms Test.");
+    vTaskDelay(pdMS_TO_TICKS(10000));
     _communication_system.begin();
+    Serial.println("Ending Comms Test.");
 }

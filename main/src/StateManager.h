@@ -24,7 +24,7 @@ class StateManager {
             sws(WakeState::ws_STANDBY),             // Default to standby state.
             sdts(DataTransmissionState::ds_IDLE),   // Default to idle transmission state.
             sms(MovementState::ms_IDLE),            // Default to idle movement state.
-            sss(StartupState::ss_PREMIER),          // Default to initial startup state.
+            sss(StartupState::ss_INVALID),          // Default to invalid startup state.
             ncs(ConnectionState::ns_NONE) {}        // Default to no networks connected state.
 
     public:

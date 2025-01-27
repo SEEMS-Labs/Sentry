@@ -5,21 +5,19 @@
 
 #include <Arduino.h>
 
+#define EE2_TEST_MODE 0     // To override certain function flows for testing purposes.
+
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
 #define ONE_SECOND 1000
 
-// KC Wifi.
-//#define WIFI_SSID "WhiteSky-KnightsCircle"
-//#define WIFI_PASSWORD "d9wk6xfg"
+// Test Wifi. (Covered via BLE communication).
+#define WIFI_SSID "REPLACE_WITH_YOUR_OWN_SSID"
+#define WIFI_PASSWORD "REPLACE_WITH_YOUR_OWN_PASS"
 
-// Jax Wifi.
-#define WIFI_SSID "NETGEAR66"
-#define WIFI_PASSWORD "dynamicbug829"
-
-// Firebase authentication.
-#define USER_EMAIL "es849112@ucf.edu"
-#define USER_PASSWORD "rCpnKBR4ZhtefmL"
+// Test Firebase authentication. (To be covered via BLE Communication).
+#define USER_EMAIL "REPLACE_WITH_YOUR_OWN_EMAIL"
+#define USER_PASSWORD "REPLACE_WITH_YOUR_OWN_PASS"
 
 // Firebase RTDB Keys/Urls.
 #define API_KEY "AIzaSyAGnxeU6342_TcjpmTKPT_WjB4AVTODfMk"
@@ -121,7 +119,7 @@ struct _obstcleDetectionData {
 enum class ConnectionType {
     ct_WIFI,
     ct_BT,
-    CT_FB
+    ct_FB
 };
 
 #define FB_USER_ACTIVITY_STATUS_ADDRESS "user_in_app"
@@ -232,9 +230,8 @@ enum class _movement_states {
 };
 
 enum class _startup_states {
-    ss_PREMIER,     // Representative of Sentry booting w/ no stored network credentials.
     ss_VALID,       // Representative of Sentry booting w/ valid stored network credentials.
-    ss_INVALID      // Representative of Sentry booting w/ invalid stored network credentials.
+    ss_INVALID      // Representative of Sentry booting w/ no or invalid stored network credentials.
 };
 
 enum class _network_connectivity_states {
@@ -250,6 +247,14 @@ using WakeState = _wake_states;
 using PowerState = _power_states;
 using StartupState = _startup_states;
 using ConnectionState = _network_connectivity_states;
+
+
+/*********************************************************
+                Sentry Preferences (NVS Memory)
+**********************************************************/
+#define PREF_CREDS "credentials"
+#define PREF_CREDS_SSID "SSID"
+#define PREF_CREDS_PASS "PASS"
 
 // End include gaurd.
 #endif /*sentryConfigInfo.h*/

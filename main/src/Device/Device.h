@@ -16,7 +16,7 @@
  */
 class Device {
     private: 
-        StateManager *_system_states;                    // Sentry State Manager.
+        StateManager *_system_states;                   // Sentry State Manager.
         ConnectivityManager _communication_system;      // Network Connectivity Management Unit.
         SensorManager _sensor_system;                   // Sensor Management Unit.
         DRV8833 _drive_system;                          // Drive System Management Unit.

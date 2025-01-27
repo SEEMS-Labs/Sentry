@@ -12,6 +12,8 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include <BLE2901.h>
+#include <BLE2902.h>
 #include <Preferences.h>
 
 class ConnectivityManager { 
@@ -26,8 +28,8 @@ class ConnectivityManager {
         Receiver _receiver;                 // The receiver arm of this connectivity manager.
 
         // Wi-Fi + Firebase members.
-        String ssid = DEFAULT_SSID;                    // User Wi-Fi SSID.
-        String password = DEFAULT_PASS;                // User Wi-Fi password.
+        String ssid = (EE2_TEST_MODE) ? WIFI_SSID : DEFAULT_SSID;           // User Wi-Fi SSID.
+        String password = (EE2_TEST_MODE) ? WIFI_PASSWORD : DEFAULT_PASS;   // User Wi-Fi password.
         DefaultNetwork network;
         UserAuth userAuth;
         FirebaseApp _fbApp;
@@ -41,6 +43,7 @@ class ConnectivityManager {
         BLEService *service = NULL;
         BLECharacteristic *characteristic = NULL;
         BLEAdvertising *advertising = NULL;
+        BLEAdvertising *advertiser = NULL;
 
         // Permanent memory + State manager access.
         Preferences preferences;
@@ -56,10 +59,14 @@ class ConnectivityManager {
 
         bool checkForCredentials();
         bool checkCredentialValidity();
+        void updatePreferredCredentials();
         void onCredentialessStartup();
         void onCredentialedStartup();
 
         void setWiFiCredentials(String ssid, String password);
+        void fbAuthHandler();
+        void fbLogResult(AsyncResult &aResult);
+        void fpPrintError(int code, String msg);
         
 
     public: 
@@ -68,12 +75,9 @@ class ConnectivityManager {
             Alerts &envStatus,                                      // Address to the global alerts data packet.
             UserSentryConfig &userConfiguration,                    // Address to the global custom user sentry configuration data packet.
             UserDriveCommands &userMovementCommands) :              // Address to the global user movement commands data packet.
-            isWiFiConnected(false),                                 // Wi-Fi begins disconnected.
-            isBluetoothConnected(false),                            // Bluetooth begins disconnected.
-            isFirebaseConnected(false),                             // Firebase begins disconnected.
             _transmitter(envData, envStatus),                       // Construct the transmitter object.
             _receiver(userConfiguration, userMovementCommands),     // Construct the receiver object.
-            userAuth("API_KEY", "USER_EMAIL", "USER_PASSWORD"),     // Construct a garbage UserAuth that will be later reset. Required becaue C++ init list.
+            userAuth(API_KEY, USER_EMAIL, USER_PASSWORD),           // Construct a garbage UserAuth that will be later reset. Required becaue C++ init list.
             network(),                                              // Construct the network object.
             _fbApp(),                                               // Construct the Firebase App object.
             _rtdb(),                                                // construct the Real Time Database object.
