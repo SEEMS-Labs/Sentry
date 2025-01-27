@@ -1,9 +1,12 @@
 
 // Include gaurd.
-#ifndef DRV8833_H
+#ifndef DRV8833_H       
 #define DRV8833_H
 
 #include "Motor.h"
+
+void move_sentry_task(void *pvParameters);      // Movment task.
+void walk_algorithm_task(void *pvParameters);   // RW task.
 
 /**
  * Represents the DRV8833 Dual Motor Driver that controls the drive system.
@@ -17,6 +20,9 @@ class DRV8833 {
         DRV8833() : 
             leftMotor(DRV8833_L_MOT_1, DRV8833_L_MOT_2), 
             rightMotor(DRV8833_R_MOT_1, DRV8833_R_MOT_2) {};
+
+        // Start movement task.
+        void beginMovementTask();
 
         // Initializes the drive system.
         void init();                

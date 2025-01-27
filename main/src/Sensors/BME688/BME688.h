@@ -37,7 +37,7 @@ class BME688 : public SensorInterface {
          * @return A byte where each bit set to 1 represents a sensor threshold that has been passed
          * and each bit set to 0 the opposite.
          */
-        uint8_t passedThreshold();
+        char passedThreshold();
 
         /**
          * Take the avarage of a buffer that holds past sensor data.

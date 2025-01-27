@@ -8,8 +8,8 @@
 
 //#define WIFI_SSID "WhiteSky-KnightsCircle"
 //#define WIFI_PASSWORD "d9wk6xfg"
-#define WIFI_SSID "NETGEAR66"
-#define WIFI_PASSWORD "dynamicbug829"
+#define WIFI_SSID "DIRECT-67-Pixel 6-PdaNet"
+#define WIFI_PASSWORD "Keurs8ha"
 
 #define USER_EMAIL "es849112@ucf.edu"
 #define USER_PASSWORD "rCpnKBR4ZhtefmL"

@@ -4,17 +4,8 @@
 
 // Grab libraries. 
 #include "SensorInterface.h"
+#include "Sentry/main/src/sentryConfigInfo.h"
 #include <Arduino.h>
-
-/**
- * Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
- */
-#define PRESENCE_THRESHOLD_PASSED 0x40
-
-/**
- * Mask representing that the Obstacle Detection Threshold of an HCSR04 Sensor has been passed.
- */
-#define OBSTCALE_THRESHOLD_PASSED 0x80
 
 /**
  * Class representing the HC-SR04 Ultrasonic Sensors used as obstacle and presence detectors.
@@ -117,7 +108,7 @@ class HCSR04 : public SensorInterface {
          * and Bit 6 representes the presence detection threshold. A bit set to 1 indicates 
          * the distance threshold has been breached and a bit set to 0 indicates the opposite.
          */
-        uint8_t passedThreshold() override;
+        char passedThreshold() override;
 
         /**
          * Take the avarage of this sensors past distances buffer.

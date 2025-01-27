@@ -31,7 +31,7 @@ void Microphone::disable() {
  * Signal that a sensor has passed its threshold(s) so that action can be taken.
  * @return True if the sensor has passed its threshold, false othewise.
  */
-uint8_t Microphone::passedThreshold() {
+char Microphone::passedThreshold() {
     return -1;
 }
 

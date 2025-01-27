@@ -2,7 +2,10 @@
 #ifndef DEVICE_H
 #define DEVICE_H
 
+#include "Sentry/main/src/sentryConfigInfo.h"
+#include "Sentry/main/src/StateManager.h"
 #include "SensorManager.h"
+#include "ConnectivityManager.h"
 #include "DRV8833.h"
 
 // Default "speed" of the Sentry based on testing and PWM duty cycle (~78%).
@@ -13,10 +16,19 @@
  */
 class Device {
     private: 
-       SensorManager sensors;   // Sensor Management Unit.
-       DRV8833 driver;          // Drive System Management Unit.
+        StateManager *_system_states;                   // Sentry State Manager.
+        ConnectivityManager _communication_system;      // Network Connectivity Management Unit.
+        SensorManager _sensor_system;                   // Sensor Management Unit.
+        DRV8833 _drive_system;                          // Drive System Management Unit.
 
     public:
+        Device( 
+            SensorData &envData,                                    // Address to the global environmental data packet.
+            Alerts &envStatus,                                      // Address to the global alerts data packet.
+            UserSentryConfig &userConfiguration,                    // Address to the global custom user sentry configuration data packet.
+            UserDriveCommands &userMovementCommands) :              // Address to the global user movement commands data packet.
+            _communication_system(envData, envStatus, userConfiguration, userMovementCommands) {}
+
         // Start the Sentry.
         void begin();     
 
@@ -30,7 +42,9 @@ class Device {
         void shutdown();
         
         // Returns the Drive System Manager of the Sentry.  
-        DRV8833 getDriver();
+        DRV8833 get_drive_system();
+
+        void testComms();
 };
 
 #endif /* DEVICE_H */
