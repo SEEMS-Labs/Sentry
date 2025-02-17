@@ -45,7 +45,7 @@ class Microphone : public SensorInterface {
         /**
          * Poll the sensor and store the data.
          */
-        float readSensor(TickType_t xMaxBlockTime) override;
+        bool readSensor(TickType_t xMaxBlockTime) override;
 
         /**
          * Mark a sensor as relevant for output collection.

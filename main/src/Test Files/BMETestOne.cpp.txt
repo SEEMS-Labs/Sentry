@@ -1,0 +1,180 @@
+// External libraries.
+#include <Arduino.h>
+#include <bsec.h>
+#include <Wire.h>
+
+// Internal headers.
+#include "sentryConfigInfo.h"
+#include "Device.h"
+
+// BME Stuff.
+#define _BME_SCK 2
+#define _BME_SDI 1
+Bsec bme688;
+void initWire();
+void beginBME();
+void error(String str);
+void checkSensorStatus();
+void readSensor();
+void toggleSensor();
+bool bme_active = false;
+bsec_virtual_sensor_t sensorList[13] = {
+    BSEC_OUTPUT_IAQ,
+    BSEC_OUTPUT_STATIC_IAQ,
+    BSEC_OUTPUT_CO2_EQUIVALENT,
+    BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
+    BSEC_OUTPUT_RAW_TEMPERATURE,
+    BSEC_OUTPUT_RAW_PRESSURE,
+    BSEC_OUTPUT_RAW_HUMIDITY,
+    BSEC_OUTPUT_RAW_GAS,
+    BSEC_OUTPUT_STABILIZATION_STATUS,
+    BSEC_OUTPUT_RUN_IN_STATUS,
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
+    BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY,
+    BSEC_OUTPUT_GAS_PERCENTAGE
+};
+
+// Global data storage.
+SensorData outgoingData;
+Alerts outgoingAlerts;
+UserSentryConfig incomingUserConfig;
+UserDriveCommands incomingUserCommands;
+
+// Create Sentry.
+Device sentry(outgoingData, outgoingAlerts, incomingUserConfig, incomingUserCommands);
+
+void setup() {
+    Serial.begin(BAUD_RATE);    
+    vTaskDelay(pdMS_TO_TICKS(10000));           // 10s delay to allow time to pullup serial monitor for debug.
+    Serial.println("Entering Device Setup.");
+    //sentry.testComms();
+
+    initWire();
+    beginBME();
+    //vTaskDelete(NULL);                          // End setup.
+} 
+
+void loop() {
+    int64_t time = bme688.getTimeMs();
+    //Serial.printf("--Normal Sentry Operations: %lld\n", time);
+    readSensor();
+    //if(time % 60000 < 1000) {
+    //    if(bme_active) Serial.println("--Turning Sensor off.");
+    //    else Serial.println("--Turning sensor on.");
+    //    toggleSensor();
+    //}
+    //vTaskDelay(pdMS_TO_TICKS(5000));
+}
+
+void initWire() {
+    Wire.setPins(_BME_SDI, _BME_SCK);
+    Wire.begin();
+}
+
+void beginBME() {
+    bme688.begin(BME68X_I2C_ADDR_HIGH, Wire);
+    String output = "\nBSEC library version " + String(bme688.version.major) + "." + String(bme688.version.minor) + "." + String(bme688.version.major_bugfix) + "." + String(bme688.version.minor_bugfix);
+    Serial.println(output);
+    checkSensorStatus();
+
+    bme688.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP);
+    checkSensorStatus();
+    bme_active = true;
+
+    // Data table Header.
+    output = "Timestamp [ms], IAQ, IAQ accuracy, Static IAQ, CO2 equivalent, breath VOC equivalent, raw temp[°C], pressure [hPa], raw relative humidity [%], gas [Ohm], Stab Status, run in status, comp temp[°C], comp humidity [%], gas percentage";
+    Serial.println(output);
+}
+
+void checkSensorStatus() {
+    bsec_library_return_t status = bme688.bsecStatus;
+    if(status != BSEC_OK) {
+        if(status < BSEC_OK) {
+            Serial.printf("BSEC Error Code: %s\n", String(status).c_str());
+            for(;;) error("BSEC");
+        }
+        else Serial.printf("BSEC Warning Code: %s\n", String(status).c_str());
+    }
+
+    int8_t bme_status = bme688.bme68xStatus;
+    if(bme_status != BME68X_OK) {
+        if(bme_status < BME68X_OK) {
+            Serial.printf("BME688 Error Code: %s", String(bme_status).c_str());
+            for(;;) error("BME688");
+        }
+        else Serial.printf("BME688 Warning Code: %s", String(bme_status).c_str());
+    }
+}
+
+void error(String str) {
+    Serial.println("ERROR!" + str);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
+String result;
+void readSensor() {
+    if(!bme_active) return;
+    unsigned long time_trigger = millis();
+    bool ready = bme688.run();
+    if (ready) { // If new data is available
+        result = String(time_trigger);
+        result += ", " + String(bme688.iaq);
+        result += ", " + String(bme688.iaqAccuracy);
+        result += ", " + String(bme688.staticIaq);
+        result += ", " + String(bme688.co2Equivalent);
+        result += ", " + String(bme688.breathVocEquivalent);
+        result += ", " + String(bme688.rawTemperature);
+        result += ", " + String(bme688.pressure);
+        result += ", " + String(bme688.rawHumidity);
+        result += ", " + String(bme688.gasResistance);
+        result += ", " + String(bme688.stabStatus);
+        result += ", " + String(bme688.runInStatus);
+        result += ", " + String(bme688.temperature);
+        result += ", " + String(bme688.humidity);
+        result += ", " + String(bme688.gasPercentage);
+        Serial.println(result);
+
+        Serial.print("Pressure: ");
+        Serial.print(bme688.pressure/100.0);
+        Serial.println(" hPa");
+        
+        Serial.print("Temperature: ");
+        Serial.print(bme688.temperature);
+        Serial.println(" *C");
+        
+        Serial.print("Humidity: ");
+        Serial.print(bme688.humidity);
+        Serial.println(" %");
+        
+        Serial.print("IAQ: ");
+        Serial.print(bme688.iaq);
+        Serial.println(" Index");
+        
+        Serial.print("CO2 Equivalent: ");
+        Serial.print(bme688.co2Equivalent);
+        Serial.println(" PPM");
+        
+        Serial.print("Breath VOC Equivalent: ");
+        Serial.print(bme688.breathVocEquivalent);
+        Serial.println(" PPM");
+        Serial.println();
+    } else {
+        if(!bme_active) Serial.print("Sensor Inactive!: ");
+        checkSensorStatus();
+    }
+
+}
+
+void toggleSensor() {
+    // Switch sensor off.
+    if(bme_active) {
+        bme_active = false;
+        bme688.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_DISABLED);
+    }
+
+    // Switch sensor on.
+    else {
+        bme_active = true;
+        bme688.updateSubscription(sensorList, 13, BSEC_SAMPLE_RATE_LP);
+    }
+}

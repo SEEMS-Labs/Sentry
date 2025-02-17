@@ -13,12 +13,7 @@ typedef int SensorID;               // Sensor Id.
 typedef uint32_t NotificationMask;  // Mask to delineate between Notifcations.
 typedef uint32_t milliSeconds;      // Milliseconds.
 
-// Task info.   
-#define TASK_STACK_DEPTH 6000   // Max stack size.
-#define MAX_PRIORITY 10         // Max task priority.
-#define MEDIUM_PRIORITY 5       // Medium task priority.
-#define LOW_PRIORITY 1          // Low task priority.
-
+// Internal Task info.   
 #define F_US_ID ((SensorID) 0)  // Id for Sentry's front ultrasonic sensor.
 #define B_US_ID ((SensorID) 1)  // Id for Sentry's back ultrasonic sensor.
 #define L_US_ID ((SensorID) 2)  // Id for Sentry's left ultrasonic sensor.
@@ -29,13 +24,17 @@ typedef uint32_t milliSeconds;      // Milliseconds.
 #define L_US_READY ((NotificationMask) 0x0100)  // Left ultrasonic sensor notification.
 #define R_US_READY ((NotificationMask) 0x1000)  // Right ultrasonic sensor notification.
 
-#define TTR 40  // Time-to-read (a single ultrasonic sensor);
-#define US_READ_TIME ((milliSeconds) pdMS_TO_TICKS(TTR))    // The maximum time it takes to read an ultrasonic sensor (in ms).
-#define MAX_US_POLL_TIME ((4 * US_READ_TIME) + 10)          // The maximum time it takes to poll all 4 ultrasonic sensors w/ some buffer time.
+#define TTR_US 40  // Time-to-read a single ultrasonic sensor (in milliseconds).
+#define US_READ_TIME ((milliSeconds) pdMS_TO_TICKS(TTR_US))     // The maximum time it takes to read an ultrasonic sensor (in ticks).
+#define MAX_US_POLL_TIME ((4 * US_READ_TIME) + 10)              // The delay between polling all 4 ultrasonic sensors w/ some buffer time.
+
+#define TTR_BME 3000  // Time-to-read the BME688 (in milliseconds).
+#define BME_READ_TIME ((milliSeconds) pdMS_TO_TICKS(TTR_BME))       // The maximum time it takes to read the BME688 (in ticks).
+#define MAX_BME_POLL_TIME 6000                                      // The delay between each new polling of the BME688.
 
 void poll_US_task(void *pvSensorManager);   // Polling ultrasonic sensor task.
 void poll_mic_task(void *pvParameters);     // Polling microphone task.
-void poll_bme_task(void *pvParameters);     // Polling BME688 task.
+void poll_bme_task(void *pvSensorManager);  // Polling BME688 task.
 
 void IRAM_ATTR on_front_us_echo_changed(void *arg);  // ISR that deals with timing of front ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
 void IRAM_ATTR on_back_us_echo_changed(void *arg);   // ISR that deals with timing of back ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
@@ -54,12 +53,17 @@ class SensorManager {
         SensorData environmentalData;   // Packet of important environmental sensor readings for SentryLink.
 
     public:
+        /**
+         * Create the main Sensor Manager.
+         */
         SensorManager() : 
             frontUS(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM),
             backUS(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM), 
             leftUS(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM), 
             rightUS(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM),
+            bme688(BME_SDI, BME_SCK),
             mic(MIC_ANALOG_OUT, DEF_MIC_LEVEL_LIM)  {};
+
         void initAllSensors();          // Initialize all 6 sensors of the Sentry.
         void attachAllInterrupts();     // Attach all sensor based interrupts of the Sentry.
         void beginAllTasks();           // Begin all sensor based tasks of the Sentry.
@@ -97,6 +101,7 @@ class SensorManager {
         BME688 bme688;      // Environmental sensor of the Sentry.
 
     public:
+        BME688 *fetchBME();
     //************************************************************************************/
 
 };

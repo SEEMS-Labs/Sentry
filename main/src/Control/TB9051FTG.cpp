@@ -1,4 +1,4 @@
-#include "DRV8833.h"
+#include "TB9051FTG.h"
 
 // Define task handles.
 TaskHandle_t move_sentry_handle = NULL;    
@@ -7,7 +7,7 @@ TaskHandle_t walk_algorithm_handle = NULL;
 void move_sentry_task(void *pvParameters) {
 
     // Initialize w/ Drive system pointer.
-    DRV8833 *driver = static_cast<DRV8833 *>(pvParameters);
+    TB9051FTG *driver = static_cast<TB9051FTG *>(pvParameters);
 
     // Begin task loop.
     for(;;) {
@@ -25,39 +25,39 @@ void walk_algorithm_task(void *pvParameters) {
     }
 }
 
-void DRV8833::beginMovementTask() {
+void TB9051FTG::beginMovementTask() {
 
 }
 
-void DRV8833::init() {
+void TB9051FTG::init() {
     leftMotor.init();
     rightMotor.init();
 }
 
-void DRV8833::setSpeed(int speed) {
+void TB9051FTG::setSpeed(int speed) {
     leftMotor.setSpeed(speed);
     rightMotor.setSpeed(speed);
 }
  
-void DRV8833::moveForward() {
+void TB9051FTG::moveForward() {
     leftMotor.spinCCW();
     rightMotor.spinCW();
 }
 
-void DRV8833::moveBackward() {
+void TB9051FTG::moveBackward() {
     leftMotor.spinCW();
     rightMotor.spinCCW();
 }
 
-void DRV8833::arcLeft() {
+void TB9051FTG::arcLeft() {
 
 }
 
-void DRV8833::arcRight() {
+void TB9051FTG::arcRight() {
 
 }
 
-void DRV8833::stop(stopType sType) {
+void TB9051FTG::stop(stopType sType) {
     leftMotor.stop(sType);
     rightMotor.stop(sType);
 }

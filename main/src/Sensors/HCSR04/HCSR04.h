@@ -89,8 +89,9 @@ class HCSR04 : public SensorInterface {
         /**
          * Poll the sensor and store the data. This must only be called from within a task.
          * @param xMaxBlockTime The maximum time allotted to read a sensor.
+         * @return True if the reading was successful, false otherwise.
          */
-        float readSensor(TickType_t xMaxBlockTime) override;
+        bool readSensor(TickType_t xMaxBlockTime) override;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -152,6 +153,12 @@ class HCSR04 : public SensorInterface {
          * @param end This is the end time of the echo pulse once this sensor has begun measuring.
          */
         void setIRSEndPulse(ulong end);
+
+        /**
+         * Get the last distance reading.
+         * @return The last known distance reading from this sensor.
+         */
+        float getDistanceReading();
 };
 
 // End include guard.

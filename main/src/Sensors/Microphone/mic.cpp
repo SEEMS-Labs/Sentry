@@ -9,8 +9,9 @@ void Microphone::init() {
 /**
  * Poll the sensor and store the data.
  */
-float Microphone::readSensor(TickType_t xMaxBlockTime) {
-    return -1.0;
+bool Microphone::readSensor(TickType_t xMaxBlockTime) {
+    bool res = false;
+    return res;
 }
 
 /**

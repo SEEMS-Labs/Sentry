@@ -5,13 +5,9 @@
 
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include <esp32-hal-ledc.h>
-#include "driver/mcpwm.h"
+#include "driver/mcpwm_prelude.h"
 #include <Arduino.h>
 
-#define DRV8833_R_MOT_1 4
-#define DRV8833_R_MOT_2 5
-#define DRV8833_L_MOT_1 6
-#define DRV8833_L_MOT_2 7
 #define PWM_FREQ 20000
 #define PWM_RES 8
 #define LED_C_LOW 0
@@ -25,9 +21,9 @@ enum stopType {
 class Motor {
     
     private:
-        const int posTerm;
-        const int negTerm;
-        int speed;
+        const int posTerm;      // PWM 1 terminal.
+        const int negTerm;      // PWM 2 terminal
+        int speed;              // Speed motor should be driving in.
 
     public:
         Motor(int posTerm, int negTerm) : posTerm(posTerm), negTerm(negTerm) {};

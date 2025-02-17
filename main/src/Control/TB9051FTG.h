@@ -1,7 +1,7 @@
 
 // Include gaurd.
-#ifndef DRV8833_H       
-#define DRV8833_H
+#ifndef TB9051FTG_H       
+#define TB9051FTG_H
 
 #include "Motor.h"
 
@@ -9,17 +9,19 @@ void move_sentry_task(void *pvParameters);      // Movment task.
 void walk_algorithm_task(void *pvParameters);   // RW task.
 
 /**
- * Represents the DRV8833 Dual Motor Driver that controls the drive system.
+ * Represents the TB9051FTG Motor Driver that drives a single
+ * motor within the drive system.
  */
-class DRV8833 {
+class TB9051FTG{
 
     private:
         Motor leftMotor;    // Left Motor of the Sentry.
         Motor rightMotor;   // Right Motor of the Sentry.
+        
     public:
-        DRV8833() : 
-            leftMotor(DRV8833_L_MOT_1, DRV8833_L_MOT_2), 
-            rightMotor(DRV8833_R_MOT_1, DRV8833_R_MOT_2) {};
+        TB9051FTG() : 
+            leftMotor(L_MOT_PWM1, L_MOT_PWM2), 
+            rightMotor(R_MOT_PWM1, R_MOT_PWM2) {};
 
         // Start movement task.
         void beginMovementTask();
@@ -50,4 +52,4 @@ class DRV8833 {
 };
 
 // End include gaurd.
-#endif /* DRV8833.h */
+#endif /* TB9051FTG.h */

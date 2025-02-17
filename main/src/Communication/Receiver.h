@@ -5,6 +5,7 @@
 
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include "Sentry/main/src/StateManager.h"
+#include <FirebaseClient.h>
 #include <BLEServer.h>
 #include <BLECharacteristic.h>
 

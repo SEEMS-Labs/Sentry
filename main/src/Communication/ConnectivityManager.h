@@ -49,25 +49,26 @@ class ConnectivityManager {
         Preferences preferences;
         StateManager *_stateManager;
 
+        // Connectivity management.
         void initFirebase();
-        void initWiFi();
-        void initSentryBLEServer();
-
         void deinitFirebase();
+        void fbAuthHandler();
+        void fbLogResult(AsyncResult &aResult);
+        void fpPrintError(int code, String msg);
+
+        void initWiFi();
         void deinitWiFi();
+
+        void initSentryBLEServer();
         void deinitSentryBLEServer();
 
+        // Wi-Fi credential management.
         bool checkForCredentials();
         bool checkCredentialValidity();
         void updatePreferredCredentials();
         void onCredentialessStartup();
         void onCredentialedStartup();
-
         void setWiFiCredentials(String ssid, String password);
-        void fbAuthHandler();
-        void fbLogResult(AsyncResult &aResult);
-        void fpPrintError(int code, String msg);
-        
 
     public: 
         ConnectivityManager(

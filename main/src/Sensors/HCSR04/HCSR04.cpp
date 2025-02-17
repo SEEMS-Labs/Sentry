@@ -12,11 +12,13 @@ void HCSR04::init() {
 
 /**
  * Poll the sensor and store the data.
+ * @return True if the reading was successful, false otherwise.
  */
-float HCSR04::readSensor(TickType_t xMaxBlockTime) {
+bool HCSR04::readSensor(TickType_t xMaxBlockTime) {
     
     // Ensure sensor is active before reading.
-    if(!active) return -1.0;
+    bool res = false;
+    if(!active) return res;
 
     // Pulse trigger for 10 us.
     pulseTrigger();
@@ -24,15 +26,16 @@ float HCSR04::readSensor(TickType_t xMaxBlockTime) {
     // Wait for pulse to complete.
     uint32_t pulseFinishedEvent = ulTaskNotifyTake(pdTRUE, xMaxBlockTime);
 
-    // Compute, store at return the distance if pulse didn't time out.
+    // Compute distance and store.
     if(pulseFinishedEvent != 0) {
         float inches = computeInches();
         if(distIndex == bufferSize) distIndex = 0;
         pastDistances[distIndex++] = inches;
-        return inches;
+        res = true;
     }
-    else return -1.0;
 
+    // Return.
+    return res;
 }
 
 /**
@@ -57,7 +60,7 @@ void HCSR04::disable() {
  */
 char HCSR04::passedThreshold() {
     // Grab the last measured distance.
-    float distance = pastDistances[distIndex];
+    float distance = pastDistances[distIndex - 1];
     char flag = 0x00;
     if(distance <= obstacleDetectionThreshold) flag |= OBSTACLE_THRESHOLD_BREACHED;
     if(distance <= presenceDetectionThreshold) flag |= PRESENCE_THRESHOLD_BREACHED;
@@ -66,7 +69,7 @@ char HCSR04::passedThreshold() {
 
 /**
  * Take the avarage of this sensors past distances buffer.
- * @return The average value of this sensors past distnaces.
+ * @return The average value of this sensors past distances.
  */
 float HCSR04::averageBuffer() {
     float average = 0;
@@ -129,4 +132,9 @@ void HCSR04::setISRStartPulse(ulong start) {
 
 void HCSR04::setIRSEndPulse(ulong end) {
     isrPulseEnd = end;
+}
+
+float HCSR04::getDistanceReading() { 
+    if(distIndex > 0) return pastDistances[distIndex - 1]; 
+    return pastDistances[bufferSize - 1]; // Index should get the last element in the buffer.
 }

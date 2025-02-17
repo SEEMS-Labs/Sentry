@@ -4,7 +4,7 @@ void Motor::init() {
     // Set pins as PWM outputs.
     ledcAttach(posTerm, PWM_FREQ, PWM_RES);
     ledcAttach(negTerm, PWM_FREQ, PWM_RES);
-   
+    
 }
 
 void Motor::spinCW() {

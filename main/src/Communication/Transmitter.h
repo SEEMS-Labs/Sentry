@@ -5,10 +5,11 @@
 
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include "Sentry/main/src/StateManager.h"
+#include <FirebaseClient.h>
 #include <BLECharacteristic.h>
 
-void tx_sensor_data_task(void *pvParameters);   // Transmit sensor data task.
-void tx_alerts_task(void *pvParameters);        // Transit sentry alerts.
+void tx_sensor_data_task(void *pvTransmitter);   // Transmit sensor data task.
+void tx_alerts_task(void *pvTransmitter);        // Transit sentry alerts.
 
 // Manages the Sentry's data tranmission to firebase. Maybe bluetooth later?
 class Transmitter {
@@ -33,7 +34,7 @@ class Transmitter {
             envStatus(envStatus),
             _stateManager(StateManager::getManager()) {};
         
-        // Start the Transmitter.
+        // Start the transmitter tasks.
         void begin();
 
         /**

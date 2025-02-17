@@ -6,7 +6,7 @@
 #include "Sentry/main/src/StateManager.h"
 #include "SensorManager.h"
 #include "ConnectivityManager.h"
-#include "DRV8833.h"
+#include "TB9051FTG.h"
 
 // Default "speed" of the Sentry based on testing and PWM duty cycle (~78%).
 #define DEFAULT_SPEED 200
@@ -16,10 +16,10 @@
  */
 class Device {
     private: 
-        StateManager *_system_states;                   // Sentry State Manager.
+        StateManager *_stateManager;                    // Sentry State Manager.
         ConnectivityManager _communication_system;      // Network Connectivity Management Unit.
         SensorManager _sensor_system;                   // Sensor Management Unit.
-        DRV8833 _drive_system;                          // Drive System Management Unit.
+        TB9051FTG _drive_system;                        // Drive System Management Unit.
 
     public:
         Device( 
@@ -27,7 +27,8 @@ class Device {
             Alerts &envStatus,                                      // Address to the global alerts data packet.
             UserSentryConfig &userConfiguration,                    // Address to the global custom user sentry configuration data packet.
             UserDriveCommands &userMovementCommands) :              // Address to the global user movement commands data packet.
-            _communication_system(envData, envStatus, userConfiguration, userMovementCommands) {}
+            _communication_system(envData, envStatus, userConfiguration, userMovementCommands),
+            _stateManager(StateManager::getManager()) {}
 
         // Start the Sentry.
         void begin();     
@@ -42,7 +43,7 @@ class Device {
         void shutdown();
         
         // Returns the Drive System Manager of the Sentry.  
-        DRV8833 get_drive_system();
+        TB9051FTG get_drive_system();
 
         void testComms();
 };

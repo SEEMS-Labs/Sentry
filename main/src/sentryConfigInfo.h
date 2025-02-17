@@ -55,27 +55,30 @@
 #define L_ENC_A     18      // Left Motor Encoder Output A.
 #define L_ENC_B     21      // Left Motor Encoder Output B.
 #define L_MOT_EN    4       // Left Motor Driver Enable Input Pin.
-#define L_MOT_DIR   5       // Left Motor Driver Direction Input Pin.
-#define L_MOT_PWM   6       // Left Motor Driver PWM Input Pin.
+#define L_MOT_PWM1  5       // Left Motor Driver Direction Input Pin.
+#define L_MOT_PWM2  6       // Left Motor Driver PWM Input Pin.
 #define L_MOT_DIAG  7       // Left Motor Driver Fault Output Pin.
-#define L_MOT_OCC   17      // Left Motor Driver Current Sense Output Pin.
+#define L_MOT_OCM   17      // Left Motor Driver Current Sense Output Pin.
 #define R_ENC_A     47      // Right Motor Encoder Output A.
 #define R_ENC_B     48      // Right Motor Encoder Output B.
 #define R_MOT_EN    39      // Right Motor Driver Enable Input Pin.
-#define R_MOT_DIR   40      // Right Motor Driver Direction Input Pin.
-#define R_MOT_PWM   41      // Right Motor Driver PWM Input Pin.
+#define R_MOT_PWM1  40      // Right Motor Driver Direction Input Pin.
+#define R_MOT_PWM2  41      // Right Motor Driver PWM Input Pin.
 #define R_MOT_DIAG  42      // Right Motor Driver Fault Output Pin.
-#define R_MOT_OCC   38      // Right Motor Driver Current Sense Output Pin.
+#define R_MOT_OCM   38      // Right Motor Driver Current Sense Output Pin.
 
 /*********************************************************
                 ALERT DEFAULT THRESHOLDS
 **********************************************************/
-#define DEF_AQI_LIM 200     // Default Air Quality Threshold (in AQI scale).
+#define DEF_AQI_LIM 151     // Default Air Quality Threshold (in AQI scale).
 #define DEF_NOISE_LIM 50    // Default Noise Level Threshold (in dB).
-#define DEF_TEMP_LIM 78     // Default Temperature Level Trheshold (in degrees F).
+#define DEF_TEMP_LIM 26.67  // Default Temperature Level Trheshold (in degrees C).
 #define DEF_HUM_LIM 60      // Default Humidity Level Threshold (in relative humidity %).
-#define DEF_PRESS_LIM 1000  // Default Pressure Level Threshold (in hPa).
+#define DEF_PRES_LIM 1200   // Default Pressure Level Threshold (in hPa).
 #define DEF_HP_EST_LIM 150  // Default Human Presence Estimation Threshold (in inches).
+#define DEF_CO2_LIM 2500    // Default CO2 Level Threshold (in ppm).
+#define DEF_VOC_LIM 20      // Default bVOC Level Threshold (in ppm).
+
 
 /*********************************************************
             COMMUNICATION CONFIGURATION
@@ -85,6 +88,8 @@
 
 typedef unsigned short int SensorReading;   // Represents sensor values. Data should never require more than 16-bits.
 typedef bool Status;                        // Represents alert status as a boolean.
+const Status UNSAFE = false;
+const Status SAFE = true;
 
 // Data packet that holds sentry sensor data to be transmitted.
 typedef struct _sensorData SensorData;
@@ -103,8 +108,17 @@ struct _alertData {
     Status temperatureStatus;
     Status humidityStatus;
     Status pressureStatus;
+    Status bVOCStatus;
+    Status co2Status;
     Status noiseStatus;
 };
+
+#define AQI_BREACHED_MASK           0x01
+#define CO2_BREACHED_MASK           0x02
+#define PRESSURE_BREACHED_MASK      0x04
+#define VOC_BREACHED_MASK           0x08
+#define TEMPERATURE_BREACHED_MASK   0x10
+#define HUMIDITY_BREACHED_MASK      0x20
 
 // Data packet that holds sentry obstacle detection data.
 typedef struct _obstcleDetectionData Obstacles;
@@ -176,8 +190,13 @@ enum class BLETransmitCode : unsigned short {
 };
 
 /*********************************************************
-                    Tasks Handles
+                    Tasks Handles and Materials
 **********************************************************/
+#define TASK_STACK_DEPTH 6000   // Max stack size.
+#define MAX_PRIORITY 10         // Max task priority.
+#define MEDIUM_PRIORITY 5       // Medium task priority.
+#define LOW_PRIORITY 1          // Low task priority.
+
 extern TaskHandle_t poll_US_handle;     // Task handle for polling the ultrasonic sensors.
 extern TaskHandle_t poll_mic_handle;    // Task handle for polling the microphone's analog output.
 extern TaskHandle_t poll_bme_handle;    // Task handle for polling the BME688.

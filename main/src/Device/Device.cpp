@@ -3,14 +3,14 @@
 void Device::begin() {
 
     // Initialize Communication System.
-    _communication_system.begin();
+    //_communication_system.begin();
 
     // Initialize Sensor System.
-    _sensor_system.initAllSensors();
-    _sensor_system.attachAllInterrupts();
-    _sensor_system.beginAllTasks();
+    //_sensor_system.initAllSensors();
+    //_sensor_system.attachAllInterrupts();
+    //_sensor_system.beginAllTasks();
 
-    // Initialize Drive system.
+    // Initialize Drive System.
     _drive_system.init();
     _drive_system.setSpeed(DEFAULT_SPEED);
 }
@@ -27,7 +27,7 @@ void Device::shutdown() {
 
 }
 
-DRV8833 Device::get_drive_system() { return _drive_system; }
+TB9051FTG Device::get_drive_system() { return _drive_system; }
 
 void Device::testComms() {
     // Initialize Communication System.

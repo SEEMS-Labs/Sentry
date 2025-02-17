@@ -71,6 +71,11 @@ bool ConnectivityManager::checkCredentialValidity() {
     return successStatus;
 }
 
+/**
+ * Set the Wi-Fi credentials of this Connectivity Manager for use in connecting to Wi-Fi.
+ * @param ssid Wi-Fi network name.
+ * @param password Wi-Fi network password.
+ */
 void ConnectivityManager::setWiFiCredentials(String ssid, String password) {
     Serial.println("Credentials existed. Setting credentials");
     Serial.printf("SSID: %s, PASS: %s\n", ssid, password);
@@ -102,6 +107,10 @@ void ConnectivityManager::begin() {
         onCredentialessStartup();
         Serial.println("Credentialess startup completed.");
     }
+
+    // Start the transmitter and receiver.
+    _transmitter.begin();
+    //_receiver.begin();
 }
 
 /**
