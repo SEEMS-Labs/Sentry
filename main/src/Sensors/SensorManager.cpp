@@ -1,6 +1,10 @@
 #include "SensorManager.h"
 #include <Arduino.h>
 
+// Define semaphore handles.
+SemaphoreHandle_t _sensor_data_buffer_mutex = NULL;
+SemaphoreHandle_t _sensor_alerts_buffer_mutex = NULL;
+
 // Define task handles.
 TaskHandle_t poll_US_handle = NULL;                
 TaskHandle_t poll_mic_handle = NULL;               
@@ -93,52 +97,80 @@ void poll_bme_task(void *pvSensorManager) {
 
     // Grab BME688 sensor and alert data packet.
     BME688 *bme = manager->fetchBME();
+    SensorData *sensorDataPacket = manager->getEnvironmentalDataPacket();
     Alerts *alertInfoPacket = manager->getAlertsPacket();
 
-    // For testing purposes.
-    char thresholdWarning;
-    float readings[6];
-    
     // Begin task loop.
     for(;;) {
-        Serial.println("\n--Begin polling BME.");
 
-        // Read BME.
-        for(int i = 0; i < 6; i++) readings[i] = -1;
-        bool success = bme->readSensor(BME_READ_TIME);
+        // Grab access to global data buffer.
+        if(xSemaphoreTake(_sensor_data_buffer_mutex, portMAX_DELAY) == pdTRUE) {
+            // Read BME.
+            Serial.println("Taking Sensor Data Mutex (in BME TASK).");
+            Serial.println("\n--Begin polling BME.");
+            bool success = bme->readSensor(BME_READ_TIME);
 
-        // Grab readings if succesful.
-        if(success) {
-            // Update Alerts packet.
-            thresholdWarning = bme->passedThreshold();
-            alertInfoPacket->airQualityStatus = (thresholdWarning & AQI_BREACHED_MASK) ? SAFE : UNSAFE;
-            alertInfoPacket->humidityStatus = (thresholdWarning & HUMIDITY_BREACHED_MASK) ? SAFE : UNSAFE;
-            alertInfoPacket->pressureStatus = (thresholdWarning & PRESSURE_BREACHED_MASK) ? SAFE : UNSAFE;
-            alertInfoPacket->temperatureStatus = (thresholdWarning & TEMPERATURE_BREACHED_MASK) ? SAFE : UNSAFE;
-            alertInfoPacket->co2Status = (thresholdWarning & CO2_BREACHED_MASK) ? SAFE : UNSAFE;
-            alertInfoPacket->bVOCStatus = (thresholdWarning & VOC_BREACHED_MASK) ? SAFE : UNSAFE;
+            // Grab readings if succesful.
+            if(success) {
+                Serial.println("Reading was successful. Time to transmit.");
 
-            // Reading.
-            readings[0] = bme->get_IAQ_reading();
-            readings[1] = bme->get_temp_reading();
-            readings[2] = bme->get_pressure_reading();
-            readings[3] = bme->get_humidity_reading();
-            readings[4] = bme->get_CO2_reading();
-            readings[5] = bme->get_VOC_reading();
+                // Check to see if alerts ready.
+                if(bme->passedThreshold()) {
+                    // Update alerts packet.
+                    char thresholdCheck = bme->passedThreshold();
+                    alertInfoPacket->airQualityStatus = (thresholdCheck & AQI_BREACHED_MASK) ? SAFE : UNSAFE;
+                    alertInfoPacket->humidityStatus = (thresholdCheck & HUMIDITY_BREACHED_MASK) ? SAFE : UNSAFE;
+                    alertInfoPacket->pressureStatus = (thresholdCheck & PRESSURE_BREACHED_MASK) ? SAFE : UNSAFE;
+                    alertInfoPacket->temperatureStatus = (thresholdCheck & TEMPERATURE_BREACHED_MASK) ? SAFE : UNSAFE;
+                    alertInfoPacket->co2Status = (thresholdCheck & CO2_BREACHED_MASK) ? SAFE : UNSAFE;
+                    alertInfoPacket->bVOCStatus = (thresholdCheck & VOC_BREACHED_MASK) ? SAFE : UNSAFE;
 
-            // Print for now.
-            Serial.printf("IAQ: %f\n", readings[0]);
-            Serial.printf("Temp: %f\n", readings[1]);
-            Serial.printf("Pressure: %f\n", readings[2]);
-            Serial.printf("Humidity: %f\n", readings[3]);
-            Serial.printf("CO2: %f\n", readings[4]);
-            Serial.printf("VOC: %f\n", readings[5]);
+                    // Notify alert transmission task.
+                    xTaskNotify(tx_alerts_handle, -1, eNoAction);
+                }
+                
+                Serial.printf("Besc AQI: %f\n", bme->get_IAQ_reading());
+                Serial.printf("Bsec Humidity: %f\n", bme->get_humidity_reading());
+                Serial.printf("Bsec Pressure: %f\n", bme->get_pressure_reading());
+                Serial.printf("Bsec Temperature: %f\n", bme->get_temp_reading());
+
+                // Preupdate
+                Serial.printf("Preupdate AQI: %f\n", sensorDataPacket->airQualityIndex);
+                Serial.printf("Preupdate Humidity: %f\n", sensorDataPacket->humidityLevel);
+                Serial.printf("Preupdate Pressure: %f\n", sensorDataPacket->pressureLevel);
+                Serial.printf("Preupdate Temperature: %f\n", sensorDataPacket->temperatureLevel);
+
+                // Update data packet.
+                sensorDataPacket->airQualityIndex = bme->get_IAQ_reading();
+                sensorDataPacket->humidityLevel = bme->get_humidity_reading();
+                sensorDataPacket->pressureLevel = bme->get_pressure_reading();
+                sensorDataPacket->temperatureLevel = bme->get_temp_reading();
+                
+                // Preupdate
+                Serial.printf("Postupdate AQI: %f\n", sensorDataPacket->airQualityIndex);
+                Serial.printf("Postupdate Humidity: %f\n", sensorDataPacket->humidityLevel);
+                Serial.printf("Postupdate Pressure: %f\n", sensorDataPacket->pressureLevel);
+                Serial.printf("Postupdate Temperature: %f\n", sensorDataPacket->temperatureLevel);
+
+                // Notify general data transmission task.
+                Serial.printf("Notifying TX_SENSOR_DATA_TASK\n");
+                xTaskNotify(tx_sensor_data_handle, BME_DATA_READY, eSetBits);
+            }
+            else Serial.println("Reading was unsuccessful. You're cooked.");
+            Serial.println("--Done polling BME.");
+
+            // Poll BME periodically.
+            Serial.println("Yielding Sensor Data Buffer Mutex (From BME Task).");
+            xSemaphoreGive(_sensor_data_buffer_mutex);
+            vTaskDelayUntil(&xLastWakeTime, MAX_BME_POLL_TIME);
+            
         }
-        else Serial.printf("Abject Failure.\n");
-        
-        Serial.println("--Done polling BME.");
-        // Poll BME periodically.
-        vTaskDelayUntil(&xLastWakeTime, MAX_BME_POLL_TIME);
+        else {
+            Serial.println("READ_BME: Data buffer wasn't availible. wait. in BME Task.");
+            // Wait to try again. 200 ms.
+            vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(10));
+        }
+
     }
 }   
 
@@ -214,6 +246,12 @@ void SensorManager::attachAllInterrupts(){
     attachInterruptArg(ECHO_R, on_right_us_echo_changed, &rightUS, CHANGE);
 }
 
+void SensorManager::createSemaphores() {
+    // Init buffer mutexes.
+    _sensor_data_buffer_mutex = xSemaphoreCreateMutex();
+    _sensor_alerts_buffer_mutex = xSemaphoreCreateMutex();
+}
+
 void SensorManager::beginAllTasks() {
 
     // Create the task to poll the 4 ultrasonic sensors.
@@ -241,15 +279,17 @@ void SensorManager::beginAllTasks() {
     */
 
     // Create the task to poll the BME688.
+    ///*
     xTaskCreatePinnedToCore(
         &poll_bme_task,         // Pointer to task function.
         "poll_bme_Name",        // Task name.
         TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
         this,                   // Pointer to parameters used for task creation.
-        MAX_PRIORITY,           // Task priority level.
+        MEDIUM_PRIORITY,           // Task priority level.
         &poll_bme_handle,       // Pointer to task handle.
         1                       // Core that the task will run on.
     );
+    //*/
 }
 
 HCSR04* SensorManager::fetchUS(SensorID id) {
@@ -269,7 +309,7 @@ BME688* SensorManager::fetchBME() {
 }
 
 Alerts* SensorManager::getAlertsPacket() {
-    return &alertInfo;
+    return alertInfo;
 }
 
 Obstacles* SensorManager::getObstaclesPacket() {
@@ -277,5 +317,5 @@ Obstacles* SensorManager::getObstaclesPacket() {
 }
 
 SensorData* SensorManager::getEnvironmentalDataPacket() {
-    return &environmentalData;
+    return environmentalData;
 }

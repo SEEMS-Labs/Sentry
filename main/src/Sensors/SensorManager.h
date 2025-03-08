@@ -48,24 +48,27 @@ class SensorManager {
 
     //*****************************  General Management  *********************************/
     private:
-        Alerts alertInfo;               // Packet of important Sentry alert info for SentryLink.
+        Alerts *alertInfo;               // Packet of important Sentry alert info for SentryLink.
         Obstacles obstacleInfo;         // Packet of obstacle detection data for navigation.
-        SensorData environmentalData;   // Packet of important environmental sensor readings for SentryLink.
+        SensorData *environmentalData;   // Packet of important environmental sensor readings for SentryLink.
 
     public:
         /**
          * Create the main Sensor Manager.
          */
-        SensorManager() : 
+        SensorManager(SensorData *envData, Alerts *envStatus) : 
             frontUS(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM),
             backUS(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM), 
             leftUS(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM), 
             rightUS(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM),
             bme688(BME_SDI, BME_SCK),
-            mic(MIC_ANALOG_OUT, DEF_MIC_LEVEL_LIM)  {};
+            mic(MIC_ANALOG_OUT, DEF_MIC_LEVEL_LIM),
+            alertInfo(envStatus),
+            environmentalData(envData)  {};
 
         void initAllSensors();          // Initialize all 6 sensors of the Sentry.
         void attachAllInterrupts();     // Attach all sensor based interrupts of the Sentry.
+        void createSemaphores();        // Create all sensor based semaphores.
         void beginAllTasks();           // Begin all sensor based tasks of the Sentry.
         Alerts *getAlertsPacket();
         Obstacles *getObstaclesPacket();

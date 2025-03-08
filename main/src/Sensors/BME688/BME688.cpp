@@ -42,7 +42,7 @@ bool BME688::readSensor(TickType_t xMaxBlockTime) {
         pastCO2[co2Index++] = sensor.co2Equivalent;
 
         if(pressureIndex == bufferSize) pressureIndex = 0;
-        pastPressure[pressureIndex++] = sensor.pressure;
+        pastPressure[pressureIndex++] = sensor.pressure/100;    // div by 100 = hectoPascal.
 
         if(vocIndex == bufferSize) vocIndex = 0;
         pastVOC[vocIndex++] = sensor.breathVocEquivalent;
@@ -56,7 +56,7 @@ bool BME688::readSensor(TickType_t xMaxBlockTime) {
         // Set the return results.
         lastReadingSuccesful = true;
         res = true;
-
+        /*
         Serial.print("Pressure: ");
         Serial.print(sensor.pressure/100.0);
         Serial.println(" hPa");
@@ -81,6 +81,7 @@ bool BME688::readSensor(TickType_t xMaxBlockTime) {
         Serial.print(sensor.breathVocEquivalent);
         Serial.println(" PPM");
         Serial.println();
+        */
     }
     else lastReadingSuccesful = false;
 

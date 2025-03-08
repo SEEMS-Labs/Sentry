@@ -1,4 +1,5 @@
 #include "ConnectivityManager.h"
+#include <ExampleFunctions.h>
 
 /**
  * Check the ESP32 preferences to see if the user has previously set Wi-Fi
@@ -109,7 +110,7 @@ void ConnectivityManager::begin() {
     }
 
     // Start the transmitter and receiver.
-    _transmitter.begin();
+    _transmitter->begin();
     //_receiver.begin();
 }
 
@@ -158,7 +159,7 @@ void ConnectivityManager::onCredentialessStartup() {
                 Serial.println("Waiting for BLE Client connection.");
                 if(_stateManager->getSentryConnectionState() == ConnectionState::ns_BLE) {
                     Serial.println("--BLE Active: Connected to BLE Client.");
-                    _transmitter.transmitBLE(BLETransmitCode::ble_tx_wait, characteristic); // Tx waiting on connection.
+                    _transmitter->transmitBLE(BLETransmitCode::ble_tx_wait, characteristic); // Tx waiting on connection.
                     isBluetoothConnected = true;
                     break;
                 }
@@ -184,16 +185,16 @@ void ConnectivityManager::onCredentialessStartup() {
 
                     Serial.printf("Received data transmission: %s -> %s\n", dataReceived.c_str(), dataSanitized.c_str());
 
-                    if(dataReceived[0] != '0' && dataReceived[0] != '1') _transmitter.transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
+                    if(dataReceived[0] != '0' && dataReceived[0] != '1') _transmitter->transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
                     else {
-                        _transmitter.transmitBLE(BLETransmitCode::ble_tx_data_valid, characteristic);
+                        _transmitter->transmitBLE(BLETransmitCode::ble_tx_data_valid, characteristic);
                         if(dataReceived[0] == '0') ssid = dataSanitized;
                         else if(dataReceived[0] == '1') password = dataSanitized;
                     } 
                 }
 
                 // Indicate that the data received was of invalid length.
-                else _transmitter.transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
+                else _transmitter->transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
             }
             
             // Check credential validity if credentials have both been set.
@@ -204,7 +205,7 @@ void ConnectivityManager::onCredentialessStartup() {
                 // Inform Sentry Link that credentials were valid. Leave loop.
                 if(readyToDisconnect) {
                     Serial.println("Credentials VALID! Sending Signal to disconnect!");
-                    _transmitter.transmitBLE(BLETransmitCode::ble_tx_creds_valid, characteristic);
+                    _transmitter->transmitBLE(BLETransmitCode::ble_tx_creds_valid, characteristic);
                     break;
                 }
 
@@ -213,7 +214,7 @@ void ConnectivityManager::onCredentialessStartup() {
                     Serial.println("Credentials INVALID! Sending Signal to retry!");
                     ssid = DEFAULT_SSID;
                     password = DEFAULT_PASS;
-                    _transmitter.transmitBLE(BLETransmitCode::ble_tx_creds_invalid, characteristic);
+                    _transmitter->transmitBLE(BLETransmitCode::ble_tx_creds_invalid, characteristic);
                 }
             }
 
@@ -343,9 +344,8 @@ bool ConnectivityManager::isConnected(ConnectionType cType) {
 void ConnectivityManager::initFirebase() {
     Firebase.printf("Firebase Client v%s\n", FIREBASE_CLIENT_VERSION);
     Serial.println("Initializing app..."); 
-    sslClient.setInsecure();
-
-    initializeApp(aClient, _fbApp, getAuth(userAuth), aResultNoCallback);
+    set_ssl_client_insecure_and_buffer(sslClient);
+    initializeApp(aClient, _fbApp, getAuth(userAuth), auth_debug_print, "authTask");
     fbAuthHandler();
 
     // Binding the FirebaseApp for authentication handler.
@@ -355,7 +355,6 @@ void ConnectivityManager::initFirebase() {
 
     // In case setting the external async result to the sync task (optional)
     // To unset, use unsetAsyncResult().
-    aClient.setAsyncResult(aResultNoCallback);
 
     // Write true to "sentry_active" field to inidcate sentry is active.
     Serial.print("Notifiying Firebase that Sentry has connected succesfully.");
@@ -366,8 +365,11 @@ void ConnectivityManager::initFirebase() {
     }
     else fpPrintError(aClient.lastError().code(), aClient.lastError().message());
     
+    // Update Connectivity state.
+    _stateManager->setSentryConnectionState(ConnectionState::ns_FB_AND_WF);
+    
     // Run a 1 second delay just because. Might be better placed elsewhere.
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    //vTaskDelay(pdMS_TO_TICKS(1000));
 }
 
 /**
@@ -383,6 +385,9 @@ void ConnectivityManager::initWiFi() {
     }
     isWiFiConnected = true;
     Serial.printf("\nConnected W/ IP: %s\n", WiFi.localIP().toString().c_str());   
+
+    // Update Connection State.
+    _stateManager->setSentryConnectionState(ConnectionState::ns_WF_ONLY);
 }
 
 /**
@@ -491,3 +496,23 @@ void ConnectivityManager::fbLogResult(AsyncResult &aResult) {
     if (aResult.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
     if (aResult.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
 }
+
+/**
+ * Initialize pointer to the transmitter. This is done seperately from the initialzer list
+ * because of Circular Inclusion between the transmitter and this manager.
+ */
+void ConnectivityManager::initTransmitter(SensorData *envData, Alerts *envStatus) {
+    _transmitter = new Transmitter(envData, envStatus, this);   // Construct pointer to the transmitter object.
+}
+
+/**
+ * Return the Firebase object.
+ */
+RealtimeDatabase ConnectivityManager::getFirebaseDatabase() { return _rtdb; }
+
+/**
+ * Return the Asynchonous Client object.
+ */
+AsyncClientClass ConnectivityManager::getAsyncClient() { return aClient; }
+
+FirebaseApp ConnectivityManager::getFbApp() { return _fbApp; }

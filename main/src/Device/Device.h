@@ -21,13 +21,18 @@ class Device {
         SensorManager _sensor_system;                   // Sensor Management Unit.
         TB9051FTG _drive_system;                        // Drive System Management Unit.
 
+        void initSensorSystem();                        // Start the BME688, Microphone, and Ultrasonics.
+        void initDriveSystem();                         // Start the BME688, Microphone, and Ultrasonics.
+        void initCommunicationSystem();                 // Start the BME688, Microphone, and Ultrasonics.
+
     public:
         Device( 
-            SensorData &envData,                                    // Address to the global environmental data packet.
-            Alerts &envStatus,                                      // Address to the global alerts data packet.
+            SensorData *envData,                                    // Address to the global environmental data packet.
+            Alerts *envStatus,                                      // Address to the global alerts data packet.
             UserSentryConfig &userConfiguration,                    // Address to the global custom user sentry configuration data packet.
             UserDriveCommands &userMovementCommands) :              // Address to the global user movement commands data packet.
             _communication_system(envData, envStatus, userConfiguration, userMovementCommands),
+            _sensor_system(envData, envStatus),
             _stateManager(StateManager::getManager()) {}
 
         // Start the Sentry.
@@ -44,8 +49,14 @@ class Device {
         
         // Returns the Drive System Manager of the Sentry.  
         TB9051FTG get_drive_system();
+        
+        void loop();
+        
+        ConnectivityManager _get_manager() { return _communication_system; }
 
         void testComms();
+        void test_data_to_firebase();
+        void test_US();
 };
 
 #endif /* DEVICE_H */

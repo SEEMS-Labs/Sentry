@@ -5,19 +5,19 @@
 
 #include <Arduino.h>
 
-#define EE2_TEST_MODE 0     // To override certain function flows for testing purposes.
+#define EE2_TEST_MODE 1     // To override certain function flows for testing purposes.
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
 #define ONE_SECOND 1000
 
 // Test Wifi. (Covered via BLE communication).
-#define WIFI_SSID "REPLACE_WITH_YOUR_OWN_SSID"
-#define WIFI_PASSWORD "REPLACE_WITH_YOUR_OWN_PASS"
+#define WIFI_SSID "SEEMS"
+#define WIFI_PASSWORD "@Ucf2025"
 
 // Test Firebase authentication. (To be covered via BLE Communication).
-#define USER_EMAIL "REPLACE_WITH_YOUR_OWN_EMAIL"
-#define USER_PASSWORD "REPLACE_WITH_YOUR_OWN_PASS"
+#define USER_EMAIL "es849112@ucf.edu"
+#define USER_PASSWORD "rCpnKBR4ZhtefmL"
 
 // Firebase RTDB Keys/Urls.
 #define API_KEY "AIzaSyAGnxeU6342_TcjpmTKPT_WjB4AVTODfMk"
@@ -72,8 +72,8 @@
 **********************************************************/
 #define DEF_AQI_LIM 151     // Default Air Quality Threshold (in AQI scale).
 #define DEF_NOISE_LIM 50    // Default Noise Level Threshold (in dB).
-#define DEF_TEMP_LIM 26.67  // Default Temperature Level Trheshold (in degrees C).
-#define DEF_HUM_LIM 60      // Default Humidity Level Threshold (in relative humidity %).
+#define DEF_TEMP_LIM 100    // Default Temperature Level Trheshold (in degrees C).
+#define DEF_HUM_LIM 90      // Default Humidity Level Threshold (in relative humidity %).
 #define DEF_PRES_LIM 1200   // Default Pressure Level Threshold (in hPa).
 #define DEF_HP_EST_LIM 150  // Default Human Presence Estimation Threshold (in inches).
 #define DEF_CO2_LIM 2500    // Default CO2 Level Threshold (in ppm).
@@ -83,11 +83,24 @@
 /*********************************************************
             COMMUNICATION CONFIGURATION
 **********************************************************/
-#define FB_ENV_DATA_ADDRESS "readings"
-#define FB_ALERTS_ADDRESS   "alerts"
+#define FB_ENV_DATA_ADDRESS "readings/"
+#define FB_ALERTS_ADDRESS   "alerts/"
 
-typedef unsigned short int SensorReading;   // Represents sensor values. Data should never require more than 16-bits.
-typedef bool Status;                        // Represents alert status as a boolean.
+#define AQ_ALERT_KEY "airQuality"
+#define HUM_ALERT_KEY "humidity"
+#define TMP_ALERT_KEY "temperature"
+#define DB_SPL_ALERT_KEY "noise"
+#define PRESSURE_ALERT_KEY "pressure"
+#define MOTION_ALERT_KEY "presence"
+
+#define AQ_DATA_KEY "airQuality"
+#define HUM_DATA_KEY "humidity"
+#define PRESSURE_DATA_KEY "pressure"
+#define TMP_DATA_KEY "temperature"
+#define DB_SPL_DATA_KEY "noise"
+
+typedef float SensorReading;   // Represents sensor values. Data should never require more than 16-bits.
+typedef bool Status;           // Represents alert status as a boolean.
 const Status UNSAFE = false;
 const Status SAFE = true;
 
@@ -111,6 +124,7 @@ struct _alertData {
     Status bVOCStatus;
     Status co2Status;
     Status noiseStatus;
+    Status motion;
 };
 
 #define AQI_BREACHED_MASK           0x01
@@ -192,7 +206,7 @@ enum class BLETransmitCode : unsigned short {
 /*********************************************************
                     Tasks Handles and Materials
 **********************************************************/
-#define TASK_STACK_DEPTH 6000   // Max stack size.
+#define TASK_STACK_DEPTH 8192   // Max stack size.
 #define MAX_PRIORITY 10         // Max task priority.
 #define MEDIUM_PRIORITY 5       // Medium task priority.
 #define LOW_PRIORITY 1          // Low task priority.
@@ -209,13 +223,17 @@ extern TaskHandle_t check_if_data_ready_handle; // Task handle to check periodic
 extern TaskHandle_t move_sentry_handle;         // Task handle to control motors.
 extern TaskHandle_t walk_algorithm_handle;      // Task handle to Enhance Random Walk algo.
 
+extern SemaphoreHandle_t _sensor_data_buffer_mutex;     // Mutex handle for tasks acessing global environmental data buffer.
+extern SemaphoreHandle_t _sensor_alerts_buffer_mutex;   // Mutex handle for tasks acessing global environmental alerts buffer. 
+
 /*********************************************************
                 Task Notification Values
 **********************************************************/
 typedef uint NotificationValue;     // 32-bit notification values for inter-task notification.
 const NotificationValue OBSTACLE_THRESHOLD_BREACHED = 0x0001;   // Mask representing that the Obstacle Detection Threshold of an HCSR04 Sensor has been passed.
 const NotificationValue PRESENCE_THRESHOLD_BREACHED = 0x0002;   // Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
-
+const NotificationValue MIC_DATA_READY = 0x0001;                // Mask representing that the microphone was just read and its data is ready to be transmitted.
+const NotificationValue BME_DATA_READY = 0x0002;                // Mask representing that the BME688 was just read and its data is ready to be transmitted.
 
 /*********************************************************
                 Sentry Operation States

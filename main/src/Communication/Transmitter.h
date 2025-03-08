@@ -5,8 +5,13 @@
 
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include "Sentry/main/src/StateManager.h"
+#pragma once
+#include "ConnectivityManager.h"
 #include <FirebaseClient.h>
 #include <BLECharacteristic.h>
+
+// Forward definition of ConnectivityManager.
+class ConnectivityManager;
 
 void tx_sensor_data_task(void *pvTransmitter);   // Transmit sensor data task.
 void tx_alerts_task(void *pvTransmitter);        // Transit sentry alerts.
@@ -15,23 +20,28 @@ void tx_alerts_task(void *pvTransmitter);        // Transit sentry alerts.
 class Transmitter {
 
     private:    
-        SensorData &envData;            // Sensor Readings Data Packet. Globally available for updates.
-        Alerts &envStatus;              // Sentry Alerts Data Packet. Globally availible for updates.
-        StateManager *_stateManager;    // Sentry State manager.
+        SensorData *envData;                // Sensor Readings Data Packet. Globally available for updates.
+        Alerts *envStatus;                  // Sentry Alerts Data Packet. Globally availible for updates.
+        StateManager *_stateManager;        // Sentry State manager.
+        ConnectivityManager *_connManager;  // Sentry connectivty manager.
 
         // Per name.
-        void updateSensorReadingsInFirebase();  
+        object_t buildSensorReadingsTransmission();  
 
         // Per name.
-        void updateAlertsInFirebase();  
+        object_t buildAlertsTransmission();  
+        
+        // Per name.
+        void updateFirebase(String writeAddress, object_t jsonString);
 
         // Initialize the tasks of the transmitter.
         void initTasks();
 
     public:
-        Transmitter(SensorData &envData, Alerts &envStatus) : 
+        Transmitter(SensorData *envData, Alerts *envStatus, ConnectivityManager *_manager) : 
             envData(envData), 
             envStatus(envStatus),
+            _connManager(_manager),
             _stateManager(StateManager::getManager()) {};
         
         // Start the transmitter tasks.
