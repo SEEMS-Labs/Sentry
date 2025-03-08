@@ -1,0 +1,107 @@
+/***************************************************
+DFRobot Gravity: Analog Sound Level Meter
+<https://www.dfrobot.com/wiki/index.php/Gravity:_Analog_Sound_Level_Meter_SKU:SEN0232>
+***************************************************
+This sample code is used to test the analog sound level meter.
+Created 2017-06-26
+By Jason <jason.ling@dfrobot.com@dfrobot.com>
+GNU Lesser General Public License.
+See <http://www.gnu.org/licenses/> for details.
+All above must be included in any redistribution
+****************************************************/
+/***********Notice and Trouble shooting***************
+1. This sample code is tested on Arduino Uno with Arduino IDE 1.0.5 r2.
+2. In order to protect the microphone on the board, you should not touch the black membrane on the microphone. Also you should keep it clean.
+3. Please do not place this module on the surface of conductor or semiconductor. Otherwise, this will cause the microphone pin to be shorted
+****************************************************/
+/*
+#define SoundSensorPin 38  // Use GPIO36 as ADC pin
+#define VREF 3.3 //voltage on AREF pin,default:operating voltage
+void setup()
+{
+Serial.begin(115200);
+pinMode(SoundSensorPin, INPUT);
+analogReadResolution(12);
+}
+void loop()
+{
+float voltageValue,dbValue;
+//voltageValue = analogRead(SoundSensorPin) / 1024.0 * VREF;
+voltageValue = analogRead(SoundSensorPin) / 4095.0 * VREF;
+float v2 = analogReadMilliVolts(SoundSensorPin);
+
+dbValue = voltageValue * 50.0; //convert voltage to decibel value
+
+  int rawADC = analogRead(SoundSensorPin);
+  Serial.print("Raw ADC: ");
+  Serial.println(rawADC);
+  delay(1000);
+
+Serial.print(dbValue,1);
+Serial.println(" dBA");
+Serial.printf("v2 = %f\n", v2);
+delay(1000);
+}
+////////////////////////////////////////////////////////////////////////
+/
+
+
+#define SoundSensorPin 38  // Use GPIO34 as ADC pin
+#define VREF 3.3  // ESP32-S3 uses 3.3V reference voltage
+
+void setup() {
+    Serial.begin(115200);
+}
+
+void loop() {
+    int rawADC = analogRead(SoundSensorPin); // Read raw ADC value
+    float voltageValue = rawADC / 4095.0 * VREF; // Convert to voltage
+    float dbValue = voltageValue * 50.0; // Convert to dBA
+
+    Serial.print("Raw ADC: ");
+    Serial.print(rawADC);
+    Serial.print(" | Voltage: ");
+    Serial.print(voltageValue, 2);
+    Serial.print("V | Sound Level: ");
+    Serial.print(dbValue, 1);
+    Serial.println(" dBA");
+
+    delay(125);
+}
+
+********************/
+
+#define SoundSensorPin 6  // Use GPIO34 as ADC pin
+#define VREF 3.3  // ESP32-S3 uses 3.3V reference voltage
+//#define VREF 5.0
+
+void setup() {
+    Serial.begin(115200);
+}
+
+void loop() {
+
+/*    int rawADC = analogRead(SoundSensorPin);
+    Serial.print("Raw ADC Value: ");
+    Serial.println(rawADC);
+    delay(500);
+}
+*/
+    int rawADC = analogRead(SoundSensorPin); // Read ADC value
+    float voltageValue = rawADC * (VREF / 4095.0); // Convert to voltage
+
+   //float voltageValue = analogRead(SoundSensorPin) / 1024.0 * VREF;
+  
+
+    float dbValue = voltageValue * 50.0; // Convert to dBA
+
+    Serial.print("Raw ADC: ");
+    Serial.print(rawADC);
+    Serial.print(" | Voltage: ");
+    Serial.print(voltageValue, 2);
+    Serial.print("V | Sound Level: ");
+    Serial.print(dbValue, 1);
+    Serial.println(" dBA");
+
+    delay(125);
+}
