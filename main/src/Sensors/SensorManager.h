@@ -33,7 +33,7 @@ typedef uint32_t milliSeconds;      // Milliseconds.
 #define MAX_BME_POLL_TIME 6000                                      // The delay between each new polling of the BME688.
 
 void poll_US_task(void *pvSensorManager);   // Polling ultrasonic sensor task.
-void poll_mic_task(void *pvParameters);     // Polling microphone task.
+void poll_mic_task(void *pvSensorManager);     // Polling microphone task.
 void poll_bme_task(void *pvSensorManager);  // Polling BME688 task.
 
 void IRAM_ATTR on_front_us_echo_changed(void *arg);  // ISR that deals with timing of front ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
@@ -62,7 +62,7 @@ class SensorManager {
             leftUS(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM), 
             rightUS(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM),
             bme688(BME_SDI, BME_SCK),
-            mic(MIC_ANALOG_OUT, DEF_MIC_LEVEL_LIM),
+            mic(MIC_ANALOG_OUT),
             alertInfo(envStatus),
             environmentalData(envData)  {};
 
@@ -88,6 +88,7 @@ class SensorManager {
         unsigned long isrPulseEnd = -1;   // Stores the time at which the sensor's echo has finished from ISR.    
 
     public:
+        void beginReadUltrasonicTask();
         HCSR04 *fetchUS(SensorID id);
     //************************************************************************************/
 
@@ -96,7 +97,9 @@ class SensorManager {
         Microphone mic;     // Noise sensor of the Sentry.
     
     public:
-
+        void beginReadMicrophoneTask();
+        Microphone *fetchMic();
+        
     //************************************************************************************/
 
     //***********************************  BME688  ***************************************/
@@ -104,6 +107,7 @@ class SensorManager {
         BME688 bme688;      // Environmental sensor of the Sentry.
 
     public:
+        void beginReadBMETask();
         BME688 *fetchBME();
     //************************************************************************************/
 

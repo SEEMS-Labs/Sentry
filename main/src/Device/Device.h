@@ -55,8 +55,11 @@ class Device {
         ConnectivityManager _get_manager() { return _communication_system; }
 
         void testComms();
-        void test_data_to_firebase();
+        void test_bme_data_to_serial();
+        void test_bme_data_to_firebase();
+        void test_mic_data_to_firebase();
         void test_US();
+        void test_motor();
 };
 
 #endif /* DEVICE_H */

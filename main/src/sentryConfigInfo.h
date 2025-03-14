@@ -6,6 +6,7 @@
 #include <Arduino.h>
 
 #define EE2_TEST_MODE 1     // To override certain function flows for testing purposes.
+#define SERIAL_ONLY_MODE 1  // Mode to deal with things only via the serial terminal and no wi-fi.
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
@@ -27,8 +28,8 @@
     SENSOR PIN DEFINITONS AND DEFAULT THRESHOLD LEVELS
 **********************************************************/
 // Ultrasonic Sensors.
-#define TRIG_F 16           // Front HC-SR04 Trigger Pin.
-#define ECHO_F 15           // Front HC-SR04 Echo Pin.
+#define TRIG_F 4           // Front HC-SR04 Trigger Pin.
+#define ECHO_F 5           // Front HC-SR04 Echo Pin.
 #define DEF_F_OBS_LIM 12    // Front HC-SR04 Obstacle Detection Threshold (in inches).
 
 #define TRIG_B 14           // Back HC-SR04 Trigger Pin.
@@ -71,7 +72,7 @@
                 ALERT DEFAULT THRESHOLDS
 **********************************************************/
 #define DEF_AQI_LIM 151     // Default Air Quality Threshold (in AQI scale).
-#define DEF_NOISE_LIM 50    // Default Noise Level Threshold (in dB).
+#define DEF_NOISE_LIM 80    // Default Noise Level Threshold (in dB).
 #define DEF_TEMP_LIM 100    // Default Temperature Level Trheshold (in degrees C).
 #define DEF_HUM_LIM 90      // Default Humidity Level Threshold (in relative humidity %).
 #define DEF_PRES_LIM 1200   // Default Pressure Level Threshold (in hPa).
@@ -98,6 +99,8 @@
 #define PRESSURE_DATA_KEY "pressure"
 #define TMP_DATA_KEY "temperature"
 #define DB_SPL_DATA_KEY "noise"
+#define VOC_DATA_KEY "bvoc"
+#define CO2_DATA_KEY "co2"
 
 typedef float SensorReading;   // Represents sensor values. Data should never require more than 16-bits.
 typedef bool Status;           // Represents alert status as a boolean.
@@ -112,6 +115,8 @@ struct _sensorData {
     SensorReading humidityLevel;
     SensorReading pressureLevel;
     SensorReading noiseLevel;
+    SensorReading bVOClevel;
+    SensorReading CO2Level;
 };
 
 // Data packet that holds sentry alert data to be transmitted.
@@ -126,6 +131,9 @@ struct _alertData {
     Status noiseStatus;
     Status motion;
 };
+
+extern float ghetto_sound;
+extern float ghetto_distance;
 
 #define AQI_BREACHED_MASK           0x01
 #define CO2_BREACHED_MASK           0x02
@@ -215,6 +223,8 @@ extern TaskHandle_t poll_US_handle;     // Task handle for polling the ultrasoni
 extern TaskHandle_t poll_mic_handle;    // Task handle for polling the microphone's analog output.
 extern TaskHandle_t poll_bme_handle;    // Task handle for polling the BME688.
 
+extern TaskHandle_t tx_bme_data_handle;
+extern TaskHandle_t tx_mic_data_handle;
 extern TaskHandle_t tx_sensor_data_handle;      // Task handle to transmit sentry sensor data to firebase.
 extern TaskHandle_t tx_alerts_handle;           // Task handle to transmit sentry alert data to firebase.
 extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user config and command data from firebase/bluetooth.
@@ -225,6 +235,9 @@ extern TaskHandle_t walk_algorithm_handle;      // Task handle to Enhance Random
 
 extern SemaphoreHandle_t _sensor_data_buffer_mutex;     // Mutex handle for tasks acessing global environmental data buffer.
 extern SemaphoreHandle_t _sensor_alerts_buffer_mutex;   // Mutex handle for tasks acessing global environmental alerts buffer. 
+extern SemaphoreHandle_t _bme_data_buffer_mutex;        // Mutex handle for tasks acessing global environmental data buffer.
+extern SemaphoreHandle_t _mic_data_buffer_mutex;        // Mutex handle for tasks acessing global environmental alerts buffer. 
+extern SemaphoreHandle_t us_data_buffer_mutex;
 
 /*********************************************************
                 Task Notification Values
@@ -234,6 +247,7 @@ const NotificationValue OBSTACLE_THRESHOLD_BREACHED = 0x0001;   // Mask represen
 const NotificationValue PRESENCE_THRESHOLD_BREACHED = 0x0002;   // Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
 const NotificationValue MIC_DATA_READY = 0x0001;                // Mask representing that the microphone was just read and its data is ready to be transmitted.
 const NotificationValue BME_DATA_READY = 0x0002;                // Mask representing that the BME688 was just read and its data is ready to be transmitted.
+const NotificationValue US_READY = 0x0003;              
 
 /*********************************************************
                 Sentry Operation States

@@ -25,9 +25,21 @@ class Microphone : public SensorInterface {
         float samplingRate;
 
         /**
+         * Index into the sound buffer pointing to the last decibel measured.
+         */
+        int noiseIndex = 0;
+        
+        /**
+         * Size of noise buffer.
+         */
+        static constexpr int bufferSize = 10;
+
+        /**
          * Buffer of past noise levels measured.
          */
-        float noiseBuffer[50];
+        float noiseBuffer[bufferSize];
+
+        bool active = false;
 
     public:
         /**
@@ -35,7 +47,7 @@ class Microphone : public SensorInterface {
          * @param output The analog output pin of this microphone.
          * @param noisethreshold The noise threshold of this microphone.
          */
-        Microphone(int output, int noisethreshold) : output(output), noiseThreshold(noiseThreshold) {};
+        Microphone(int output) : output(output) {};
 
         /**
          * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
@@ -68,6 +80,10 @@ class Microphone : public SensorInterface {
          * @return The average value of a buffer which stores recent past sensor data.
          */
         float averageBuffer() override;
+
+        float rmsBuffer();
+        float getLastSoundLevelReading();
+        
 
 };
 

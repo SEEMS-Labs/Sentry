@@ -2,7 +2,9 @@
 
 // Define task handles.
 TaskHandle_t tx_sensor_data_handle = NULL;                
-TaskHandle_t tx_alerts_handle = NULL;               
+TaskHandle_t tx_alerts_handle = NULL;        
+TaskHandle_t tx_bme_data_handle = NULL;
+TaskHandle_t tx_mic_data_handle = NULL;       
 
 void tx_sensor_data_task(void *pvTransmitter) {
     // Initialize task.
@@ -36,9 +38,15 @@ void tx_sensor_data_task(void *pvTransmitter) {
 
         // Update Mic.
         if((notifValue & MIC_DATA_READY) == MIC_DATA_READY) {
-            transmitter->transmitSensorData();
+            if(xSemaphoreTake(_sensor_data_buffer_mutex, portMAX_DELAY) == pdTRUE) {
+                Serial.println("<-- Sensor Data Mutex (Tx Task).");
+                transmitter->transmitSensorData();
+                Serial.println("--> Sensor Data Mutex (Tx Task).");
+                xSemaphoreGive(_sensor_data_buffer_mutex);
+            }
+            else Serial.println("Data unavailible. Waiting. (Tx Task)");
+            vTaskDelay(pdMS_TO_TICKS(10));  
         }
-    
     }
 }
 
@@ -63,6 +71,14 @@ void tx_alerts_task(void *pvTransmitter) {
     }
 }
 
+void tx_bme_data_task(void *pvTransmitter) {
+
+}
+
+void tx_mic_data_task(void *pvTransmitter) {
+    
+}
+
 /**
  * Per name.Build up the sensor readings via Json Strings and then send them over to 
  * the proper address in Firebase.
@@ -78,13 +94,15 @@ object_t Transmitter::buildSensorReadingsTransmission() {
     // Update data packet.
     // Write all sensor readings to Json Strings.
     JsonWriter writer;
-    object_t jsonString[6];
+    object_t jsonString[8];
     writer.create(jsonString[1], AQ_DATA_KEY, envData->airQualityIndex);
     writer.create(jsonString[2], HUM_DATA_KEY, envData->humidityLevel);
     writer.create(jsonString[3], TMP_DATA_KEY, envData->temperatureLevel);
     writer.create(jsonString[4], DB_SPL_DATA_KEY, envData->noiseLevel);
     writer.create(jsonString[5], PRESSURE_DATA_KEY, envData->pressureLevel);
-    writer.join(jsonString[0], 5, jsonString[1], jsonString[2], jsonString[3], jsonString[4], jsonString[5]);
+    writer.create(jsonString[6], VOC_DATA_KEY, envData->bVOClevel);
+    writer.create(jsonString[7], CO2_DATA_KEY, envData->CO2Level);
+    writer.join(jsonString[0], 7, jsonString[1], jsonString[2], jsonString[3], jsonString[4], jsonString[5], jsonString[6], jsonString[7]);
     return jsonString[0];
 }
 
@@ -209,5 +227,20 @@ void Transmitter::transmitAlerts() {
     else {
         object_t jsonString = buildAlertsTransmission();
         updateFirebase(FB_ALERTS_ADDRESS, jsonString);
+    }
+}
+
+void Transmitter::transmitDistanceData() {
+    // Check to see if firebase connection is still active.
+    if(_stateManager->getSentryConnectionState() != ConnectionState::ns_FB_AND_WF);     // Currently nothing to do if connection isn't active....
+
+    // Later: Check to see if Wi-Fi is still connected.
+    // If so, attempt reconnection....
+
+    else {
+        JsonWriter writer;
+        object_t jsonString;
+        writer.create(jsonString, "distance", ghetto_distance);
+        updateFirebase(FB_ENV_DATA_ADDRESS, jsonString);
     }
 }

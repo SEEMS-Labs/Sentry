@@ -98,13 +98,15 @@ public:
         envData->noiseLevel = -1.0;
         envData->pressureLevel = -1.0;
         envData->temperatureLevel = -1.0;
+        envData->bVOClevel = -1;
+        envData->CO2Level = -1;
 
         // Initialze alerts reading buffer.
-        envStatus->airQualityStatus = -1.0;
-        envStatus->humidityStatus = -1.0;
-        envStatus->noiseStatus = -1.0;
-        envStatus->pressureStatus = -1.0;
-        envStatus->temperatureStatus = -1.0;
+        envStatus->airQualityStatus = false;
+        envStatus->humidityStatus = false;
+        envStatus->noiseStatus = false;
+        envStatus->pressureStatus = false;
+        envStatus->temperatureStatus = false;
 
         initTransmitter(envData, envStatus); // Construct pointer to the transmitter object.
     }

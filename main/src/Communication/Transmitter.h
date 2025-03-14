@@ -15,6 +15,8 @@ class ConnectivityManager;
 
 void tx_sensor_data_task(void *pvTransmitter);   // Transmit sensor data task.
 void tx_alerts_task(void *pvTransmitter);        // Transit sentry alerts.
+void tx_bme_data_task(void *pvTransmitter);
+void tx_mic_data_task(void *pvTransmitter);
 
 // Manages the Sentry's data tranmission to firebase. Maybe bluetooth later?
 class Transmitter {
@@ -59,6 +61,9 @@ class Transmitter {
 
         // Transmit only sentry alerts to Firebase.
         void transmitAlerts();
+
+        void transmitMicData();
+        void transmitDistanceData();
 };
 
 // End include guard.
