@@ -132,9 +132,6 @@ struct _alertData {
     Status motion;
 };
 
-extern float ghetto_sound;
-extern float ghetto_distance;
-
 #define AQI_BREACHED_MASK           0x01
 #define CO2_BREACHED_MASK           0x02
 #define PRESSURE_BREACHED_MASK      0x04

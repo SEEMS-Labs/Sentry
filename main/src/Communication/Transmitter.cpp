@@ -240,7 +240,7 @@ void Transmitter::transmitDistanceData() {
     else {
         JsonWriter writer;
         object_t jsonString;
-        writer.create(jsonString, "distance", ghetto_distance);
+        //writer.create(jsonString, "distance", ghetto_distance);
         updateFirebase(FB_ENV_DATA_ADDRESS, jsonString);
     }
 }
