@@ -1,5 +1,4 @@
 #include "ConnectivityManager.h"
-#include <ExampleFunctions.h>
 
 /**
  * Check the ESP32 preferences to see if the user has previously set Wi-Fi
@@ -171,10 +170,10 @@ void ConnectivityManager::onCredentialessStartup() {
         while(_stateManager->getSentryConnectionState() == ConnectionState::ns_BLE && !readyToDisconnect) {
             Serial.println("Waiting for Network Credentials.");
             // Check if any information is ready to be read from the receiver.
-            bleDataAvailable = _receiver.checkIfDataAvailible(UserDataType::UDT_WIFI_AUTH);
+            bleDataAvailable = _receiver->checkIfDataAvailible(UserDataType::UDT_WIFI_AUTH);
             if(bleDataAvailable && !readyToDisconnect) {
                 // Read the data.
-                dataReceived = _receiver.receiveBLEData();
+                dataReceived = _receiver->receiveBLEData();
                 Serial.println("Data Availible!");
                 vTaskDelay(pdMS_TO_TICKS(500));    // Small delay for BLE Stack before updating it.
 
@@ -344,26 +343,42 @@ bool ConnectivityManager::isConnected(ConnectionType cType) {
 void ConnectivityManager::initFirebase() {
     Firebase.printf("Firebase Client v%s\n", FIREBASE_CLIENT_VERSION);
     Serial.println("Initializing app..."); 
-    set_ssl_client_insecure_and_buffer(sslClient);
-    initializeApp(aClient, _fbApp, getAuth(userAuth), auth_debug_print, "authTask");
-    fbAuthHandler();
+    sslClient.setInsecure();
+    initializeApp(aClient, _fbApp, getAuth(userAuth), auth_debug_print, "AuthTask");
 
     // Binding the FirebaseApp for authentication handler.
     // To unbind, use Database.resetApp();
     _fbApp.getApp<RealtimeDatabase>(_rtdb);
     _rtdb.url(DATABASE_URL);
 
-    // In case setting the external async result to the sync task (optional)
-    // To unset, use unsetAsyncResult().
-
-    // Write true to "sentry_active" field to inidcate sentry is active.
-    Serial.print("Notifiying Firebase that Sentry has connected succesfully.");
-    bool status = _rtdb.set<bool>(aClient, "sentry_conn", true);
-    if(status) {
-        Serial.println("Sentry Firebase status succesfully updated");
-        isFirebaseConnected = true;
+    // Write true to "sentry_conn" field to inidcate sentry is active.
+    Serial.println("Check for succesful Sentry Connection to Firebase.");
+    ulong startTime = millis();
+    while (!_fbApp.ready() && (millis() - startTime) < 3000) {
+        Serial.println("Waiting for Firebase to be ready...");
+        _fbApp.loop();
+        delay(1); // Give Firebase more time to stabilize.
     }
-    else fpPrintError(aClient.lastError().code(), aClient.lastError().message());
+    ulong endTime = millis();
+
+    if((endTime - startTime) < 5000 && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
+    else Serial.println("Connection to Firebase timed out.");
+
+    if(_fbApp.ready() == false) {
+        Serial.println("Unsuccesful connection. Timeout reached....");
+        while(true) {
+            Serial.println("Press Reset Button an Try again Until a better solution is found out.");
+            delay(1000);
+        }
+    }
+    else {
+        bool status = _rtdb.set<bool>(aClient, "sentry_conn", true);
+        if(_fbApp.ready() && status) {
+            Serial.println("Connection Good. Sentry Firebase status succesfully updated.");
+            isFirebaseConnected = true;
+        }
+        else Serial.println("Connection Bad. Sentry Firebase status not updated.");
+    }
     
     // Update Connectivity state.
     _stateManager->setSentryConnectionState(ConnectionState::ns_FB_AND_WF);
@@ -422,8 +437,8 @@ void ConnectivityManager::initSentryBLEServer() {
     characteristic->setValue("Sentry Ready.");
 
     // Set callbacks for server and characteristic.
-    server->setCallbacks(&_receiver);
-    characteristic->setCallbacks(&_receiver);
+    server->setCallbacks(_receiver);
+    characteristic->setCallbacks(_receiver);
 
     // Create and modify advertiser.
     advertiser = BLEDevice::getAdvertising();
@@ -464,55 +479,76 @@ void ConnectivityManager::deinitSentryBLEServer() {
     delay(1000);
 }
 
-/**
- * Prints an error message related to Firebase error. 
- * @param code the error code.
- * @param msg the error description.
- */
-void ConnectivityManager::fpPrintError(int code, String msg) {
-    Firebase.printf("Error, msg: %s, code: %d\n", msg.c_str(), code);
+void ConnectivityManager::auth_debug_print(AsyncResult &aResult) {
+    if (aResult.isEvent())
+    {
+        Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
+    }
+
+    if (aResult.isDebug())
+    {
+        Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
+    }
+
+    if (aResult.isError())
+    {
+        Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
+    }
 }
 
-/**
- * Blocking authentication handler with timeout for Firebase.
- */
-void ConnectivityManager::fbAuthHandler() {
-    unsigned long ms = millis();
-    while (_fbApp.isInitialized() && !_fbApp.ready() && millis() - ms < 120 * 1000) {
-        // The JWT token processor required for ServiceAuth and CustomAuth authentications.
-        // JWT is a static object of JWTClass and it's not thread safe.
-        // In multi-threaded operations (multi-FirebaseApp), you have to define JWTClass for each FirebaseApp,
-        // and set it to the FirebaseApp via FirebaseApp::setJWTProcessor(<JWTClass>), before calling initializeApp.
-        JWT.loop(_fbApp.getAuth());
-        fbLogResult(aResultNoCallback);
+void ConnectivityManager::processData(AsyncResult &res) {
+    // Exits when no result available when calling from the loop.
+    if (!res.isResult())
+        return;
+
+    if (res.isEvent())
+    {
+        Firebase.printf("Event task: %s, msg: %s, code: %d\n", res.uid().c_str(), res.eventLog().message().c_str(), res.eventLog().code());
+    }
+
+    if (res.isDebug())
+    {
+        Firebase.printf("Debug task: %s, msg: %s\n", res.uid().c_str(), res.debug().c_str());
+    }
+
+    if (res.isError())
+    {
+        Firebase.printf("Error task: %s, msg: %s, code: %d\n", res.uid().c_str(), res.error().message().c_str(), res.error().code());
+    }
+
+    if (res.available())
+    {
+        Firebase.printf("task: %s, payload: %s\n", res.uid().c_str(), res.c_str());
     }
 }
 
 /**
- * Log the result from the firebase async result.
- */
-void ConnectivityManager::fbLogResult(AsyncResult &aResult) {
-    if (aResult.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.appEvent().message().c_str(), aResult.appEvent().code());
-    if (aResult.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
-    if (aResult.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
-}
-
-/**
- * Initialize pointer to the transmitter. This is done seperately from the initialzer list
+ * Construct pointer to the transmitter. This is done seperately from the initialzer list
  * because of Circular Inclusion between the transmitter and this manager.
  */
-void ConnectivityManager::initTransmitter(SensorData *envData, Alerts *envStatus) {
+void ConnectivityManager::constructTransmitter(SensorData *envData, Alerts *envStatus) {
     _transmitter = new Transmitter(envData, envStatus, this);   // Construct pointer to the transmitter object.
 }
 
-/**
- * Return the Firebase object.
- */
-RealtimeDatabase ConnectivityManager::getFirebaseDatabase() { return _rtdb; }
+void ConnectivityManager::constructReceiver(UserSentryConfig *userConfiguration, UserDriveCommands *userMovementCommands) {
+    _receiver = new Receiver(userConfiguration, userMovementCommands, this);
+}
 
 /**
- * Return the Asynchonous Client object.
+ * Return pointer to the Firebase object.
  */
-AsyncClientClass ConnectivityManager::getAsyncClient() { return aClient; }
+RealtimeDatabase *ConnectivityManager::getFirebaseDatabase() { return &_rtdb; }
 
-FirebaseApp ConnectivityManager::getFbApp() { return _fbApp; }
+/**
+ * Return pointer to the Asynchonous Client object.
+ */
+AsyncClientClass *ConnectivityManager::getAsyncClient() { return &aClient; }
+
+/**
+ * Return pointer to the Firebase App object.
+ */
+FirebaseApp *ConnectivityManager::getFbApp() { return &_fbApp; }
+
+void ConnectivityManager::loop() {
+    processData(aResultNoCallback);
+}

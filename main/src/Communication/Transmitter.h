@@ -13,6 +13,14 @@
 // Forward definition of ConnectivityManager.
 class ConnectivityManager;
 
+// Represents different tranmssion states.
+enum class DataTransmissionType {
+    tx_BME_DATA,
+    tx_MIC_DATA,
+    tx_ALERTS,
+    tx_TEST
+};
+
 void tx_sensor_data_task(void *pvTransmitter);   // Transmit sensor data task.
 void tx_alerts_task(void *pvTransmitter);        // Transit sentry alerts.
 void tx_bme_data_task(void *pvTransmitter);
@@ -27,17 +35,32 @@ class Transmitter {
         StateManager *_stateManager;        // Sentry State manager.
         ConnectivityManager *_connManager;  // Sentry connectivty manager.
 
+        JsonWriter jsonWriter;
+        object_t bmeTxBuffer[8];
+        object_t alertTxBuffer[7];
+        float micTxBuffer;
+
         // Per name.
-        object_t buildSensorReadingsTransmission();  
+        void buildBmeDataTransmission();  
+
+        void buildMicDataTransmisison();
 
         // Per name.
         object_t buildAlertsTransmission();  
         
-        // Per name.
-        void updateFirebase(String writeAddress, object_t jsonString);
+        /**
+         * Update the appropriate fields in firebase as decided by the parameters passed.
+         * @param writeAddress Address of field to write to in Firebase.
+         * @param dtt Type of tranmission being written to Firebase given that 
+         */
+        void updateFirebase(String writeAddress, DataTransmissionType dtt);
 
         // Initialize the tasks of the transmitter.
         void initTasks();
+        void createSemaphores();
+        void beginBmeTxTask();
+        void beginMicTxTask();
+        void beginAlertsTxTask();
 
     public:
         Transmitter(SensorData *envData, Alerts *envStatus, ConnectivityManager *_manager) : 
@@ -57,13 +80,11 @@ class Transmitter {
         void transmitBLE(BLETransmitCode tx_code, BLECharacteristic *characteristic);
 
         // Transmit only environmental data to Firebase.
-        void transmitSensorData();
+        void transmitSensorData(DataTransmissionType dtt);
 
         // Transmit only sentry alerts to Firebase.
         void transmitAlerts();
 
-        void transmitMicData();
-        void transmitDistanceData();
 };
 
 // End include guard.

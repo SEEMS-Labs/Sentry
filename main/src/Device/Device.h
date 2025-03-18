@@ -29,8 +29,8 @@ class Device {
         Device( 
             SensorData *envData,                                    // Address to the global environmental data packet.
             Alerts *envStatus,                                      // Address to the global alerts data packet.
-            UserSentryConfig &userConfiguration,                    // Address to the global custom user sentry configuration data packet.
-            UserDriveCommands &userMovementCommands) :              // Address to the global user movement commands data packet.
+            UserSentryConfig *userConfiguration,                    // Address to the global custom user sentry configuration data packet.
+            UserDriveCommands *userMovementCommands) :              // Address to the global user movement commands data packet.
             _communication_system(envData, envStatus, userConfiguration, userMovementCommands),
             _sensor_system(envData, envStatus),
             _stateManager(StateManager::getManager()) {}
@@ -53,13 +53,15 @@ class Device {
         void loop();
         
         ConnectivityManager _get_manager() { return _communication_system; }
-
+        
         void testComms();
         void test_bme_data_to_serial();
         void test_bme_data_to_firebase();
         void test_mic_data_to_firebase();
+        void test_bme_and_mic_data_to_firebase();
         void test_US();
         void test_motor();
+        void test_connection_to_firebase();
 };
 
 #endif /* DEVICE_H */

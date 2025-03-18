@@ -19,7 +19,8 @@ bool Microphone::readSensor(TickType_t xMaxBlockTime) {
 
     // Take analog reading.
     int _adc_reading = analogRead(output);
-    float decibels_measured = (3.3)*(_adc_reading/4095.0) * 50;
+    //float decibels_measured = (3.3)*(_adc_reading/4095.0) * 50;
+    float decibels_measured = analogReadMilliVolts(output) * 50.0/1000.0;
 
     // Store.
     if(noiseIndex == bufferSize) noiseIndex = 0;

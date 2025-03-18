@@ -68,7 +68,6 @@ class SensorManager {
 
         void initAllSensors();          // Initialize all 6 sensors of the Sentry.
         void attachAllInterrupts();     // Attach all sensor based interrupts of the Sentry.
-        void createSemaphores();        // Create all sensor based semaphores.
         void beginAllTasks();           // Begin all sensor based tasks of the Sentry.
         Alerts *getAlertsPacket();
         Obstacles *getObstaclesPacket();
@@ -88,6 +87,7 @@ class SensorManager {
         unsigned long isrPulseEnd = -1;   // Stores the time at which the sensor's echo has finished from ISR.    
 
     public:
+        void initUS();
         void beginReadUltrasonicTask();
         HCSR04 *fetchUS(SensorID id);
     //************************************************************************************/
@@ -97,6 +97,7 @@ class SensorManager {
         Microphone mic;     // Noise sensor of the Sentry.
     
     public:
+        void initMic();
         void beginReadMicrophoneTask();
         Microphone *fetchMic();
         
@@ -107,6 +108,7 @@ class SensorManager {
         BME688 bme688;      // Environmental sensor of the Sentry.
 
     public:
+        void initBME();
         void beginReadBMETask();
         BME688 *fetchBME();
     //************************************************************************************/

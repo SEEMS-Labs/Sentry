@@ -5,16 +5,22 @@
 
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include "Sentry/main/src/StateManager.h"
+#pragma once
+#include "ConnectivityManager.h"
 #include <FirebaseClient.h>
 #include <BLEServer.h>
 #include <BLECharacteristic.h>
 
+// Forward definition of ConnectivityManager.
+class ConnectivityManager;
+
 class Receiver : public BLEServerCallbacks, public BLECharacteristicCallbacks {
 
     private:
-        UserSentryConfig &userConfiguration;        // Holds custom user configuration from SentryLink. Globally available to be read.
-        UserDriveCommands &userMovementCommands;    // Holds user movement commands given from SentryLink. Globally availible to be read.
+        UserSentryConfig *userConfiguration;        // Holds custom user configuration from SentryLink. Globally available to be read.
+        UserDriveCommands *userMovementCommands;    // Holds user movement commands given from SentryLink. Globally availible to be read.
         StateManager *_stateManager;                // Sentry State manager.
+        ConnectivityManager *_connManager;          // Sentry connectivty manager.
 
         bool bleDataAvailable = false;              // Represents if the BLE Server has data available from client.
         String bleDataBuffer = "";                  // Buffer of data received from BLE client.
@@ -25,7 +31,7 @@ class Receiver : public BLEServerCallbacks, public BLECharacteristicCallbacks {
         void updateUserDriveCommands(UserDriveCommands *commands);
 
     public:
-        Receiver(UserSentryConfig &userConfiguration, UserDriveCommands &userMovementCommands) : 
+        Receiver(UserSentryConfig *userConfiguration, UserDriveCommands *userMovementCommands, ConnectivityManager *_manager) : 
             userConfiguration(userConfiguration), 
             userMovementCommands(userMovementCommands),
             _stateManager(StateManager::getManager()) {};

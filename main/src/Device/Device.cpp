@@ -39,8 +39,9 @@ void Device::test_bme_data_to_firebase() {
         Serial.println(".");
         delay(500);
     }
-    initCommunicationSystem();
-    initSensorSystem();
+    _communication_system.begin();
+    _sensor_system.initBME();
+    _sensor_system.beginReadBMETask();
 }
 
 void Device::test_mic_data_to_firebase() {
@@ -49,12 +50,26 @@ void Device::test_mic_data_to_firebase() {
         Serial.println(".");
         delay(500);
     }
-    //initCommunicationSystem();
-    initSensorSystem();
+    _communication_system.begin();
+    _sensor_system.initMic();
+    _sensor_system.beginReadMicrophoneTask();
+}
+
+void Device::test_bme_and_mic_data_to_firebase() {
+    Serial.println("Beginning Transmission of BME and Microphone Data to Firebase test");
+    for(int i = 0; i < 10; i++) {
+        Serial.println(".");
+        delay(500);
+    }
+    _communication_system.begin();
+    _sensor_system.initMic();
+    _sensor_system.initBME();
+    _sensor_system.beginReadBMETask();
+    _sensor_system.beginReadMicrophoneTask();
 }
 
 void Device::test_US() {
-    _sensor_system.initAllSensors();
+    _sensor_system.initUS();
     _sensor_system.attachAllInterrupts();
     _sensor_system.beginAllTasks();
 }
@@ -66,7 +81,6 @@ void Device::initSensorSystem() {
     // Sensors.
     _sensor_system.initAllSensors();
     _sensor_system.attachAllInterrupts();
-    //_sensor_system.createSemaphores();
     _sensor_system.beginAllTasks();
 }
 
@@ -81,11 +95,10 @@ void Device::initCommunicationSystem() {
 
 void Device::loop() {
     // Loop the FIREBASEAPP for auth purposes.
-    _communication_system.getFbApp().loop();
+    _communication_system.getFbApp()->loop();
 }
 
 void Device::test_bme_data_to_serial() {
-    _sensor_system.createSemaphores();
     _sensor_system.beginReadBMETask();
 }
 
@@ -107,4 +120,13 @@ void Device::test_motor() {
 
     // Stop.
     _drive_system.stop(stopType::BRAKE);
+}
+
+void Device::test_connection_to_firebase() {
+    Serial.println("Beginning Connection to Firebase test");
+    for(int i = 0; i < 10; i++) {
+        Serial.println(".");
+        delay(500);
+    }
+    _communication_system.begin();
 }

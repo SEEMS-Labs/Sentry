@@ -6,7 +6,7 @@
 #include <Arduino.h>
 
 #define EE2_TEST_MODE 1     // To override certain function flows for testing purposes.
-#define SERIAL_ONLY_MODE 1  // Mode to deal with things only via the serial terminal and no wi-fi.
+#define SERIAL_ONLY_MODE 0  // Mode to deal with things only via the serial terminal and no wi-fi.
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
@@ -211,7 +211,7 @@ enum class BLETransmitCode : unsigned short {
 /*********************************************************
                     Tasks Handles and Materials
 **********************************************************/
-#define TASK_STACK_DEPTH 8192   // Max stack size.
+#define TASK_STACK_DEPTH 16384  // Max stack size.
 #define MAX_PRIORITY 10         // Max task priority.
 #define MEDIUM_PRIORITY 5       // Medium task priority.
 #define LOW_PRIORITY 1          // Low task priority.
@@ -222,7 +222,6 @@ extern TaskHandle_t poll_bme_handle;    // Task handle for polling the BME688.
 
 extern TaskHandle_t tx_bme_data_handle;
 extern TaskHandle_t tx_mic_data_handle;
-extern TaskHandle_t tx_sensor_data_handle;      // Task handle to transmit sentry sensor data to firebase.
 extern TaskHandle_t tx_alerts_handle;           // Task handle to transmit sentry alert data to firebase.
 extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user config and command data from firebase/bluetooth.
 extern TaskHandle_t check_if_data_ready_handle; // Task handle to check periodically if user data is available.
@@ -230,11 +229,7 @@ extern TaskHandle_t check_if_data_ready_handle; // Task handle to check periodic
 extern TaskHandle_t move_sentry_handle;         // Task handle to control motors.
 extern TaskHandle_t walk_algorithm_handle;      // Task handle to Enhance Random Walk algo.
 
-extern SemaphoreHandle_t _sensor_data_buffer_mutex;     // Mutex handle for tasks acessing global environmental data buffer.
-extern SemaphoreHandle_t _sensor_alerts_buffer_mutex;   // Mutex handle for tasks acessing global environmental alerts buffer. 
-extern SemaphoreHandle_t _bme_data_buffer_mutex;        // Mutex handle for tasks acessing global environmental data buffer.
-extern SemaphoreHandle_t _mic_data_buffer_mutex;        // Mutex handle for tasks acessing global environmental alerts buffer. 
-extern SemaphoreHandle_t us_data_buffer_mutex;
+extern SemaphoreHandle_t firebase_app_mutex;    // Semaphore Handle for mutex gaurding access to Firebase app for Transmission.
 
 /*********************************************************
                 Task Notification Values
