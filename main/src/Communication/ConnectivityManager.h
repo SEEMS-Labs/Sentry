@@ -45,9 +45,9 @@ private:
     UserAuth userAuth;
     FirebaseApp _fbApp;
     RealtimeDatabase _rtdb;
-    WiFiClientSecure sslClient;
-    AsyncClientClass aClient;
-    AsyncResult aResultNoCallback;
+    WiFiClientSecure sslClient, sslStreamClient;
+    AsyncClientClass aClient, aStreamClient;
+    AsyncResult aResultNoCallback, streamResult;
 
     // Bluetooth members.
     BLEServer *server = NULL;
@@ -61,6 +61,7 @@ private:
     StateManager *_stateManager;
 
     // Transmitter and Receiver.
+    void createFirebaseSemaphores();
     void constructTransmitter(SensorData *envData, Alerts *envStatus);
     void constructReceiver(UserSentryConfig *userConfiguration, UserDriveCommands *userMovementCommands);
 
@@ -68,7 +69,6 @@ private:
     void initFirebase();
     void deinitFirebase();
     static void auth_debug_print(AsyncResult &aResult);
-    static void processData(AsyncResult &res);
 
     void initWiFi();
     void deinitWiFi();
@@ -106,11 +106,11 @@ public:
     void connect(ConnectionType cType);
     void disconnect(ConnectionType cType);
     bool isConnected(ConnectionType cType);
-    void loop();
 
     RealtimeDatabase *getFirebaseDatabase();
     AsyncClientClass *getAsyncClient();
     FirebaseApp *getFbApp();
+    AsyncResult *getSentryLinkStreamResult();
 };
 
 // End include gaurd.

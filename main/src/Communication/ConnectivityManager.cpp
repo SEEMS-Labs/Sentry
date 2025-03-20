@@ -1,5 +1,8 @@
 #include "ConnectivityManager.h"
 
+// Define Semaphore handles.
+SemaphoreHandle_t firebase_app_mutex = NULL;
+
 /**
  * Check the ESP32 preferences to see if the user has previously set Wi-Fi
  * credentials. Optionally, if Wi-Fi credentials do exist upon checking, they 
@@ -110,7 +113,7 @@ void ConnectivityManager::begin() {
 
     // Start the transmitter and receiver.
     _transmitter->begin();
-    //_receiver.begin();
+    _receiver->begin();
 }
 
 /**
@@ -170,7 +173,7 @@ void ConnectivityManager::onCredentialessStartup() {
         while(_stateManager->getSentryConnectionState() == ConnectionState::ns_BLE && !readyToDisconnect) {
             Serial.println("Waiting for Network Credentials.");
             // Check if any information is ready to be read from the receiver.
-            bleDataAvailable = _receiver->checkIfDataAvailible(UserDataType::UDT_WIFI_AUTH);
+            bleDataAvailable = _receiver->checkIfBLEDataAvailible(UserDataType::UDT_WIFI_AUTH);
             if(bleDataAvailable && !readyToDisconnect) {
                 // Read the data.
                 dataReceived = _receiver->receiveBLEData();
@@ -286,6 +289,7 @@ void ConnectivityManager::connect(ConnectionType cType) {
     switch (cType) {
         case ConnectionType::ct_FB :
             Serial.println("Beginning Connection to Firebase!");
+            createFirebaseSemaphores();
             initFirebase();
             Serial.println("Firebase Initialized!");
             break;
@@ -343,15 +347,24 @@ bool ConnectivityManager::isConnected(ConnectionType cType) {
 void ConnectivityManager::initFirebase() {
     Firebase.printf("Firebase Client v%s\n", FIREBASE_CLIENT_VERSION);
     Serial.println("Initializing app..."); 
+
+    // Client for transmitter.
     sslClient.setInsecure();
+
+    // Client for receiver.
+    sslStreamClient.setInsecure();
+
     initializeApp(aClient, _fbApp, getAuth(userAuth), auth_debug_print, "AuthTask");
 
-    // Binding the FirebaseApp for authentication handler.
-    // To unbind, use Database.resetApp();
+    // Binding the FirebaseApp for authentication handler. To unbind, use Database.resetApp();
     _fbApp.getApp<RealtimeDatabase>(_rtdb);
     _rtdb.url(DATABASE_URL);
 
-    // Write true to "sentry_conn" field to inidcate sentry is active.
+    // Setup the firebase stream for the reciever to watch.
+    aStreamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
+    _rtdb.get(aStreamClient, SENTRYLINK_ROOT, streamResult, true);
+
+    // Attempt to connect to Firebase with a timeout.
     Serial.println("Check for succesful Sentry Connection to Firebase.");
     ulong startTime = millis();
     while (!_fbApp.ready() && (millis() - startTime) < 3000) {
@@ -361,9 +374,11 @@ void ConnectivityManager::initFirebase() {
     }
     ulong endTime = millis();
 
+    // Show the connection status and timed value.
     if((endTime - startTime) < 5000 && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
     else Serial.println("Connection to Firebase timed out.");
-
+    
+    // Deal with non connection state.
     if(_fbApp.ready() == false) {
         Serial.println("Unsuccesful connection. Timeout reached....");
         while(true) {
@@ -371,8 +386,10 @@ void ConnectivityManager::initFirebase() {
             delay(1000);
         }
     }
+
+    // Set the "sentry_conn" field in Firebase to notify the partner app of successful connection.
     else {
-        bool status = _rtdb.set<bool>(aClient, "sentry_conn", true);
+        bool status = _rtdb.set<bool>(aClient, FB_SENTRY_CONN, true);
         if(_fbApp.ready() && status) {
             Serial.println("Connection Good. Sentry Firebase status succesfully updated.");
             isFirebaseConnected = true;
@@ -382,9 +399,6 @@ void ConnectivityManager::initFirebase() {
     
     // Update Connectivity state.
     _stateManager->setSentryConnectionState(ConnectionState::ns_FB_AND_WF);
-    
-    // Run a 1 second delay just because. Might be better placed elsewhere.
-    //vTaskDelay(pdMS_TO_TICKS(1000));
 }
 
 /**
@@ -496,30 +510,11 @@ void ConnectivityManager::auth_debug_print(AsyncResult &aResult) {
     }
 }
 
-void ConnectivityManager::processData(AsyncResult &res) {
-    // Exits when no result available when calling from the loop.
-    if (!res.isResult())
-        return;
-
-    if (res.isEvent())
-    {
-        Firebase.printf("Event task: %s, msg: %s, code: %d\n", res.uid().c_str(), res.eventLog().message().c_str(), res.eventLog().code());
-    }
-
-    if (res.isDebug())
-    {
-        Firebase.printf("Debug task: %s, msg: %s\n", res.uid().c_str(), res.debug().c_str());
-    }
-
-    if (res.isError())
-    {
-        Firebase.printf("Error task: %s, msg: %s, code: %d\n", res.uid().c_str(), res.error().message().c_str(), res.error().code());
-    }
-
-    if (res.available())
-    {
-        Firebase.printf("task: %s, payload: %s\n", res.uid().c_str(), res.c_str());
-    }
+/**
+ * Create the mutex that guards the firebase app used in transmission.
+ */
+void ConnectivityManager::createFirebaseSemaphores() {
+    firebase_app_mutex = xSemaphoreCreateMutex();
 }
 
 /**
@@ -549,6 +544,9 @@ AsyncClientClass *ConnectivityManager::getAsyncClient() { return &aClient; }
  */
 FirebaseApp *ConnectivityManager::getFbApp() { return &_fbApp; }
 
-void ConnectivityManager::loop() {
-    processData(aResultNoCallback);
+/**
+ * Return pointer to the stream result that holds information transmitted by the Sentry.
+ */
+AsyncResult *ConnectivityManager::getSentryLinkStreamResult() {
+    return &streamResult;
 }

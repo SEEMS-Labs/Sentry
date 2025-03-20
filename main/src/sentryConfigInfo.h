@@ -49,7 +49,7 @@
 #define BME_SCK 2   // BME688 SCK (SCL) Pin for I2C.
 
 // Noise Sensor.
-#define MIC_ANALOG_OUT 8        // Microphone Analog Output Pin.
+#define MIC_ANALOG_OUT 6        // Microphone Analog Output Pin.
 #define DEF_MIC_LEVEL_LIM 50    // Microphone Noise Level Threshold (in dB).
 
 // Motors and Motor Drivers.
@@ -84,8 +84,14 @@
 /*********************************************************
             COMMUNICATION CONFIGURATION
 **********************************************************/
-#define FB_ENV_DATA_ADDRESS "readings/"
-#define FB_ALERTS_ADDRESS   "alerts/"
+#define FB_SENTRY_CONN      ((String) "sentry/sentry_conn")
+#define FB_ENV_DATA_ADDRESS ((String) "sentry/readings/")
+#define FB_ALERTS_ADDRESS   ((String) "sentry/alerts/")
+
+#define SENTRYLINK_ROOT ((String) "sentrylink/")
+#define SL_CTRL_PATH ((String) "controller")
+#define SL_CONFIG_PATH ((String) "user_config")
+#define SL_ACTIVE_PATH ((String) "user_in_app")
 
 #define AQ_ALERT_KEY "airQuality"
 #define HUM_ALERT_KEY "humidity"
@@ -173,19 +179,69 @@ struct _userSentryConfig {
     SensorReading userNoiseLevelThreshold;
 };
 
+/**
+ * Access information for the sentry link controller path being read in firebase.
+ */
+enum SL_ctrlInfo {
+    JOYSTICK_MASK =  0x02FF,    // Mask for retrieving Joystick coordinate information from the Sentrylink controller address.
+    CD_STA_MASK = 0x0003,       // Mask for retrieving Dpad and Controller state from the Sentrylink controller address.
+    ACTIVE_MASK = 0x0001,       // Mask for retrieving Controller active status from the Sentrylink controller address.
+    JSTK_Y_LSB = 15,            // LSB of the Joystick Y Coordinates field within Sentrylink controller address.
+    JSTK_X_LSB = 5,             // LSB of the Joystick X Coordinates field within Sentrylink controller address.
+    DPAD_STA_LSB = 2,           // LSB of the Dpad field within Sentrylink controller address.
+    CTRL_STA_LSB = 1,           // LSB of the controller configuration field within Sentrylink controller address.
+    ACTIVE_LSB = 0,             // LSB of the controller activity field within Sentrylink controller address.
+    DPAD_L = 0,                 // Decimal value of Dpad Field if Left is selected.
+    DPAD_R = 1,                 // Decimal value of Dpad Field if Right is selected.
+    DPAD_U = 2,                 // Decimal value of Dpad Field if Up is selected.
+    DPAD_D = 3,                 // Decimal value of Dpad Field if Down is selected.
+    DPAD_ACTIVE = 1,            // Decimal value of controller state field if Dpad is selected.
+    JSTK_ACTIVE = 2             // Decimal value of controller state if joystick is selected.
+};
+
 // Data packet that holds sentry driving instructions from the user transmitted from SentryLink.
 typedef struct _userDriveCommands UserDriveCommands;
 struct _userDriveCommands {
-    Status dpad_Forward;
-    Status dpad_Backward;
-    Status dpad_Left;
-    Status dpad_Right;
-    signed short int joystick_X;    // Expecting signed 16-bit x-coordinates.
-    signed short int joystick_Y;    // Expecting signed 16-bit y-coordinates.
+
+    // Controller active state.
+    bool active;
+
+    // Field that informs the Sentry if its Dpad is selected.
+    bool usingDpad;  
+    
+    // Field that informs the Sentry if its Joystick is selected.
+    bool usingJoystick;      
+    
+    // Dpad "button" states. Only 1 state can be active (true) at a time.
+    bool dpad_Forward;
+    bool dpad_Backward;
+    bool dpad_Left;
+    bool dpad_Right;
+
+    /**
+     * Joystick coordinates.
+     */
+    signed short int joystick_X;    // Expecting signed 10-bit x-coordinates.
+    signed short int joystick_Y;    // Expecting signed 10-bit y-coordinates.
+};
+
+/**
+ * Access information for the sentry link user configuration path being read in firebase.
+ */
+enum SL_UserCfgInfo {
+    THN_MASK =  0x007F,     // Mask for retrieving Temp/Hum/Noise thresholds from the Sentrylink user configuration address.
+    PRS_MASK =  0x07FF,     // Mask for retrieving Pressure thresholds from the Sentrylink user configuration address.
+    AQI_MASK =  0x01FF,     // Mask for retrieving Air Quality thresholds from the Sentrylink user configuration address.
+    TMP_LSB =   0,          // LSB of the Temperature threshold field within Sentrylink user configuration address.
+    HUM_LSB =   7,          // LSB of the Humidity threshold field within Sentrylink user configuration address.
+    SPL_LSB =   14,         // LSB of the Noise threshold field within Sentrylink user configuration address.
+    PRS_LSB =   30,         // LSB of the Pressure threshold field within Sentrylink user configuration address.
+    AQI_LSB =   21,         // LSB of the Air Quality threshold field within Sentrylink user configuration address.
 };
 
 // Represents different types of data received from SentryLink.
 enum class UserDataType {
+    UDT_ACTIVITY,   // User in-ap activity status.
     UDT_CONFIG,     // User configuration data.
     UDT_MVMT,       // User movement command data.
     UDT_FB_AUTH,    // User Firebase credentials (equivalent to SentryLink credentials).
@@ -220,16 +276,14 @@ extern TaskHandle_t poll_US_handle;     // Task handle for polling the ultrasoni
 extern TaskHandle_t poll_mic_handle;    // Task handle for polling the microphone's analog output.
 extern TaskHandle_t poll_bme_handle;    // Task handle for polling the BME688.
 
-extern TaskHandle_t tx_bme_data_handle;
-extern TaskHandle_t tx_mic_data_handle;
+extern SemaphoreHandle_t firebase_app_mutex;    // Semaphore Handle for mutex gaurding access to Firebase app for Transmission.
+extern TaskHandle_t tx_bme_data_handle;         // Task handle to transmit sentry BME688 readings to firebase.
+extern TaskHandle_t tx_mic_data_handle;         // Task handle to transmit sentry Mic readings to firebase.
 extern TaskHandle_t tx_alerts_handle;           // Task handle to transmit sentry alert data to firebase.
 extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user config and command data from firebase/bluetooth.
-extern TaskHandle_t check_if_data_ready_handle; // Task handle to check periodically if user data is available.
 
 extern TaskHandle_t move_sentry_handle;         // Task handle to control motors.
 extern TaskHandle_t walk_algorithm_handle;      // Task handle to Enhance Random Walk algo.
-
-extern SemaphoreHandle_t firebase_app_mutex;    // Semaphore Handle for mutex gaurding access to Firebase app for Transmission.
 
 /*********************************************************
                 Task Notification Values

@@ -54,6 +54,7 @@ class Device {
         
         ConnectivityManager _get_manager() { return _communication_system; }
         
+        void test();
         void testComms();
         void test_bme_data_to_serial();
         void test_bme_data_to_firebase();

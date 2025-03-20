@@ -21,17 +21,16 @@ enum class DataTransmissionType {
     tx_TEST
 };
 
-void tx_sensor_data_task(void *pvTransmitter);   // Transmit sensor data task.
-void tx_alerts_task(void *pvTransmitter);        // Transit sentry alerts.
-void tx_bme_data_task(void *pvTransmitter);
-void tx_mic_data_task(void *pvTransmitter);
+void tx_alerts_task(void *pvTransmitter);       // Transmit Sentry environmental alerts to Firebase.
+void tx_bme_data_task(void *pvTransmitter);     // Transmit Sentry BME data readings to Firebase.
+void tx_mic_data_task(void *pvTransmitter);     // Transmit Sentry Mic data readings to Firebase.
 
 // Manages the Sentry's data tranmission to firebase. Maybe bluetooth later?
 class Transmitter {
 
     private:    
-        SensorData *envData;                // Sensor Readings Data Packet. Globally available for updates.
-        Alerts *envStatus;                  // Sentry Alerts Data Packet. Globally availible for updates.
+        SensorData *envData;                // Pointer to Sensor Readings Data Packet. Globally available for updates.
+        Alerts *envStatus;                  // Pointer to Sentry Alerts Data Packet. Globally availible for updates.
         StateManager *_stateManager;        // Sentry State manager.
         ConnectivityManager *_connManager;  // Sentry connectivty manager.
 
@@ -57,7 +56,6 @@ class Transmitter {
 
         // Initialize the tasks of the transmitter.
         void initTasks();
-        void createSemaphores();
         void beginBmeTxTask();
         void beginMicTxTask();
         void beginAlertsTxTask();

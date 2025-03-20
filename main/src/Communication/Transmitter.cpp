@@ -1,8 +1,5 @@
 #include "Transmitter.h"
 
-// Define Semaphore handles.
-SemaphoreHandle_t firebase_app_mutex = NULL;
-
 // Define task handles.
 TaskHandle_t tx_alerts_handle = NULL;        
 TaskHandle_t tx_bme_data_handle = NULL;
@@ -234,17 +231,11 @@ void Transmitter::beginAlertsTxTask() {
     );
 }
 
-// Create the necessary semaphores.
-void Transmitter::createSemaphores() {
-    firebase_app_mutex = xSemaphoreCreateMutex();
-}
-
 /**
  * Initialize the data tranmission tasks. This should only be called 
  * after the Sentry is fully connected to Wi-Fi.
  */
 void Transmitter::begin() {
-    createSemaphores(); 
     initTasks(); 
 }
 
@@ -280,7 +271,7 @@ void Transmitter::transmitSensorData(DataTransmissionType dtt) {
             break;
         
         case DataTransmissionType::tx_MIC_DATA :
-            writeAddress = ((String) FB_ENV_DATA_ADDRESS) + ((String) DB_SPL_DATA_KEY);
+            writeAddress = FB_ENV_DATA_ADDRESS + ((String) DB_SPL_DATA_KEY);
             buildMicDataTransmisison();
             break;
 

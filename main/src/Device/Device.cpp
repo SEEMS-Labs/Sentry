@@ -130,3 +130,16 @@ void Device::test_connection_to_firebase() {
     }
     _communication_system.begin();
 }
+
+void Device::test(){
+    Serial.println("Beginning Test");
+    for(int i = 0; i < 10; i++) {
+        Serial.println(".");
+        delay(500);
+    }
+    _communication_system.begin();
+    _sensor_system.initMic();
+    _sensor_system.initBME();
+    _sensor_system.beginReadBMETask();
+    _sensor_system.beginReadMicrophoneTask();
+}
