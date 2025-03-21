@@ -53,6 +53,71 @@ void HCSR04::disable() {
 }
 
 /**
+ * Set this ultrasonic sensors human presence estimation threshold.
+ * @param preferences Access to Sentry NVM (permanent memory).
+ */
+void HCSR04::setThreshold(Preferences preferences) {
+
+    // Try grabbing data from preferences if sentry is starting up.
+    if(StateManager::getManager()->getSentrySensorThresholdState() == ThresholdState::ts_PRE_STARTUP)  
+        setThresholdFromPreferences(preferences);
+    
+    // Set sensor thresholds and update preferences.
+    else setThresholdAndUpdatePreferences(preferences);
+}
+
+/**
+ * Set this ultrasonic sensors human presence estimation threshold from 
+ * the preferences stored on the Sentry.
+ * @param preferences Access to Sentry NVM (permanent memory).
+ */
+void HCSR04::setThresholdFromPreferences(Preferences preferences) {
+    Serial.println("Checking if Custom HCSR04 HPE Thresholds Exist.");
+
+    // Create preferences namespace in read mode.
+    preferences.begin(PREF_SENSOR_THDS, true);
+    
+    // Check for intial exisitence of bme thresholds (if this doesn't exist, this is the first Sentry init).
+    bool isInitialBoot = !preferences.isKey(PREF_HPE_THD);
+
+    // Set thresholds to values found in preferences if the key did exist.
+    if(isInitialBoot == false) {
+        Serial.println("Custom HPE Threshold did exist. Setting custom limit.");
+        presenceDetectionThreshold = preferences.getFloat(PREF_HPE_THD, DEF_HP_EST_LIM);
+        
+    }
+    else Serial.println("Custom HPE Threshold did not exist. Retaining default limit.");
+    
+    // End the preferences namespace and return.
+    preferences.end();
+}
+
+/**
+ * Set thisultrasonic sensors human presence estimation threshold from 
+ * the global threshold info packet and update the preferences stored on 
+ * sentry to reflect this change.
+ * @param preferences Access to Sentry NVM (permanent memory).
+ */
+void HCSR04::setThresholdAndUpdatePreferences(Preferences preferences) {
+    // Grab the new threshold.
+    float newLimit = sensorManager->getUserSentryConfigDataPacket()->userPresenceEstimationThreshold;
+    Serial.printf("US Threshold [%f -> %f]\n", presenceDetectionThreshold, newLimit);
+
+    // Check to see if update should be made.
+    bool limitChanged = (presenceDetectionThreshold != newLimit);
+    bool newLimitInBounds = (newLimit <= MAX_HPE) && (newLimit >= MIN_HPE);
+
+    // Set the new HPE limit if required.
+    if(limitChanged && newLimitInBounds) {
+        presenceDetectionThreshold = newLimit;
+        preferences.begin(PREF_SENSOR_THDS, false);
+        preferences.putFloat(PREF_HPE_THD, newLimit);
+        preferences.end();
+    }
+    
+}
+
+/**
  * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.
  * @return A byte where the Bit 7 (MSB) represents ths obstacle detection threshold 
  * and Bit 6 representes the presence detection threshold. A bit set to 1 indicates 

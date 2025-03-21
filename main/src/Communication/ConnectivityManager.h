@@ -94,8 +94,11 @@ public:
                                                 _fbApp(),                                               // Construct the Firebase App object.
                                                 _rtdb(),                                                // construct the Real Time Database object.
                                                 sslClient(),                                            // Construct SSL Client object.
+                                                sslStreamClient(),                                      // Construct SSL Stream Client object.
                                                 aResultNoCallback(),                                    // Construct the AsyncResult object.
-                                                aClient(sslClient),                                     // Construct the Async Result Object.
+                                                streamResult(),                                         // Construct the Stream AsyncResult object.
+                                                aClient(sslClient),                                     // Construct the AsyncClient Object.
+                                                aStreamClient(sslStreamClient),                         // Construct the Stream Async Client Object.
                                                 _stateManager(StateManager::getManager())               // Grab the instance of the state manager singleton.
     {
         constructTransmitter(envData, envStatus);
@@ -110,7 +113,8 @@ public:
     RealtimeDatabase *getFirebaseDatabase();
     AsyncClientClass *getAsyncClient();
     FirebaseApp *getFbApp();
-    AsyncResult *getSentryLinkStreamResult();
+    AsyncResult getSentryLinkStreamResult();
+    Receiver *getReceiver();
 };
 
 // End include gaurd.

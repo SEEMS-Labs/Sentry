@@ -114,6 +114,108 @@ void BME688::disable() {
 }
 
 /**
+ * Set this BME688's thresholds from memory.
+ * @param preferences Access to Sentry NVM (permanent memory).
+ */
+void BME688::setThresholds(Preferences preferences) {
+    
+    // Try grabbing data from preferences if sentry is starting up.
+    if(StateManager::getManager()->getSentrySensorThresholdState() == ThresholdState::ts_PRE_STARTUP)  
+        setThresholdFromPreferences(preferences);
+    
+    // Set sensor thresholds and update preferences.
+    else setThresholdAndUpdatePreferences(preferences);
+}
+
+/**
+ * Set this BME688's thresholds from the preferences stored on the Sentry.
+ * @param preferences Access to Sentry NVM (permanent memory).
+ */
+void BME688::setThresholdFromPreferences(Preferences preferences) {
+    Serial.println("Checking if Custom BME Thresholds Exist.");
+
+    // Create preferences namespace in read mode.
+    preferences.begin(PREF_SENSOR_THDS, true);
+    
+    // Check for intial exisitence of bme thresholds (if this doesn't exist, this is the first Sentry init).
+    bool isInitialBoot = !preferences.isKey(PREF_IAQ_THD);
+
+    // Set thresholds to values found in preferences if the key did exist.
+    if(isInitialBoot == false) {
+        Serial.println("Custom BME Thresholds did exist. Setting custom limits.");
+
+        iaqThreshold = preferences.getFloat(PREF_IAQ_THD, DEF_AQI_LIM);
+        //co2Threshold = preferences.getFloat(PREF_CO2_THD, DEF_CO2_LIM);
+        pressureThreshold = preferences.getFloat(PREF_PRES_THD, DEF_PRES_LIM);
+        //vocThreshold = preferences.getFloat(PREF_VOC_THD, DEF_VOC_LIM);
+        tempThreshold = preferences.getFloat(PREF_TEMP_THD, DEF_TEMP_LIM);
+        humIndex = preferences.getFloat(PREF_HUM_THD, DEF_HUM_LIM);
+    }
+    else Serial.println("Custom BME Thresholds did not exist. Retaining default limits.");
+    
+    // End the preferences namespace and return.
+    preferences.end();
+}
+
+/**
+ * Set this BME688's thresholds from the global threshold info packet
+ * and update the preferences stored on sentry to reflect this change.
+ * @param preferences Access to Sentry NVM (permanent memory).
+ */
+void BME688::setThresholdAndUpdatePreferences(Preferences preferences) {
+
+    // Open thresholds namespace and set those that have changed.
+    preferences.begin(PREF_SENSOR_THDS, false);
+
+    // Deal with temperature.
+    float newLimit = sensorManager->getUserSentryConfigDataPacket()->userTemperatureLevelThreshold;
+    bool limitChanged = (tempThreshold != newLimit);
+    bool newLimitInBounds = (newLimit <= MAX_TEMP) && (newLimit >= MIN_TEMP);
+    Serial.printf("Temp: [%f -> %f]\n", tempThreshold, newLimit);
+    if(limitChanged && newLimitInBounds) {
+        Serial.printf("BME Temp threshold change accepted.\n");
+        tempThreshold = newLimit;
+        preferences.putFloat(PREF_TEMP_THD, newLimit);
+    }
+
+    // Deal with AQI.
+    newLimit = sensorManager->getUserSentryConfigDataPacket()->userAirQualityIndexThreshold;
+    limitChanged = (iaqThreshold != newLimit);
+    newLimitInBounds = (newLimit <= MAX_AQI) && (newLimit >= MIN_AQI);
+    Serial.printf("AQI: [%f -> %f]\n", iaqThreshold, newLimit);
+    if (limitChanged && newLimitInBounds) {
+        Serial.printf("BME AQI threshold change accepted.\n");
+        iaqThreshold = newLimit;
+        preferences.putFloat(PREF_IAQ_THD, newLimit);
+    }
+
+    // Deal with Humidity.
+    newLimit = sensorManager->getUserSentryConfigDataPacket()->userHumidityLevelThreshold;
+    limitChanged = (humThreshold != newLimit);
+    newLimitInBounds = (newLimit <= MAX_HUM) && (newLimit >= MIN_HUM);
+    Serial.printf("Humidity: [%f -> %f]\n", humThreshold, newLimit);
+    if (limitChanged && newLimitInBounds) {
+        Serial.printf("BME Hum threshold change accepted.\n");
+        humThreshold = newLimit;
+        preferences.putFloat(PREF_HUM_THD, newLimit);
+    }
+    
+    // Deal with pressure.
+    newLimit = sensorManager->getUserSentryConfigDataPacket()->userPressureLevelThreshold;
+    limitChanged = (pressureThreshold != newLimit);
+    newLimitInBounds = (newLimit <= MAX_PRES) && (newLimit >= MIN_PRES);
+    Serial.printf("Pressure: [%f -> %f]\n", pressureThreshold, newLimit);
+    if (limitChanged && newLimitInBounds) {
+        Serial.printf("BME Pressure threshold change accepted.\n");
+        pressureThreshold = newLimit;
+        preferences.putFloat(PREF_PRES_THD, newLimit);
+    }
+
+    // Close the namespace.
+    preferences.end();
+}
+
+/**
  * Signal that this BME688 has passed its threshold(s).
  * @return A byte where each bit set to 1 represents a sensor threshold that has been passed
  * and each bit set to 0 the opposite. 
@@ -147,12 +249,12 @@ char BME688::passedThreshold() {
     float humAvg = averageBuffer();
     
     // Perform masking operation. 
-    if(iaqAvg > DEF_AQI_LIM) res |= AQI_BREACHED_MASK;
-    if(co2Avg > DEF_CO2_LIM) res |= CO2_BREACHED_MASK;
-    if(presAvg > DEF_PRES_LIM) res |= PRESSURE_BREACHED_MASK;
-    if(vocAvg > DEF_VOC_LIM) res |= VOC_BREACHED_MASK;
-    if(tempAvg > DEF_TEMP_LIM) res |= TEMPERATURE_BREACHED_MASK;
-    if(humAvg > DEF_HUM_LIM) res |= HUMIDITY_BREACHED_MASK;
+    if(iaqAvg > iaqThreshold) res |= AQI_BREACHED_MASK;
+    //if(co2Avg > co2Threshold) res |= CO2_BREACHED_MASK;
+    if(presAvg > pressureThreshold) res |= PRESSURE_BREACHED_MASK;
+    //if(vocAvg > vocThreshold) res |= VOC_BREACHED_MASK;
+    if(tempAvg > tempThreshold) res |= TEMPERATURE_BREACHED_MASK;
+    if(humAvg > humThreshold) res |= HUMIDITY_BREACHED_MASK;
 
     // Return.
     return res;
@@ -270,3 +372,8 @@ float BME688::get_humidity_reading() {
  * retrieve the average value of a sensors past measurements buffer.
  */
 void BME688::setCurrentVirtualSensor(bsec_virtual_sensor_t virtualSensor) { currentVirtualSensor = virtualSensor; }
+
+float BME688::getAqiThreshold() { return iaqThreshold; }
+float BME688::getTempThreshold() { return tempThreshold; }
+float BME688::getHumThreshold() { return humThreshold; }
+float BME688::getPresThreshold() { return pressureThreshold; }

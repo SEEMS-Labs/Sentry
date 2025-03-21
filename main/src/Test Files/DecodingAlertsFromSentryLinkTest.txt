@@ -1,0 +1,88 @@
+/******************************************************************************
+
+                              Online C++ Compiler.
+               Code, Compile, Run and Debug C++ program online.
+Write your code in this editor and press "Run" button to compile and execute it.
+
+*******************************************************************************/
+
+#include <iostream>
+#include <stdlib.h>
+#include<cstdint>
+
+/**
+ * Access information for the sentry link user configuration path being read in firebase.
+ */
+enum SL_UserCfgInfo {
+    THN_MASK =  0x007F,     // Mask for retrieving Temp/Hum/Noise thresholds from the Sentrylink user configuration address.
+    PRS_MASK =  0x07FF,     // Mask for retrieving Pressure thresholds from the Sentrylink user configuration address.
+    AQI_MASK =  0x01FF,     // Mask for retrieving Air Quality thresholds from the Sentrylink user configuration address.
+    TMP_LSB =   0,          // LSB of the Temperature threshold field within Sentrylink user configuration address.
+    HUM_LSB =   7,          // LSB of the Humidity threshold field within Sentrylink user configuration address.
+    SPL_LSB =   14,         // LSB of the Noise threshold field within Sentrylink user configuration address.
+    PRS_LSB =   30,         // LSB of the Pressure threshold field within Sentrylink user configuration address.
+    AQI_LSB =   21,         // LSB of the Air Quality threshold field within Sentrylink user configuration address.
+};
+
+typedef float SensorReading;
+typedef struct _userSentryConfig UserSentryConfig;
+struct _userSentryConfig {
+    SensorReading userAirQualityIndexThreshold;
+    SensorReading userTemperatureLevelThreshold;
+    SensorReading userHumidityLevelThreshold;
+    SensorReading userPressureLevelThreshold;
+    SensorReading userNoiseLevelThreshold;
+};
+
+UserSentryConfig decodeUserConfigurationData(uint64_t userConfigData);
+void showDecodedData(UserSentryConfig configData);
+UserSentryConfig setConfigData();
+
+int main() {
+    std::cout<<"Hello World\n";
+    UserSentryConfig data = setConfigData();
+    
+    uint64_t hmm = 0x1133E9F7255;
+    showDecodedData(decodeUserConfigurationData(hmm));
+    return 0;
+}
+
+UserSentryConfig decodeUserConfigurationData(uint64_t userConfigData) {
+
+    // Decode.
+    float temperatureLvl = (userConfigData >> SL_UserCfgInfo::TMP_LSB) & SL_UserCfgInfo::THN_MASK;
+    float humidityLvl = (userConfigData >> SL_UserCfgInfo::HUM_LSB) & SL_UserCfgInfo::THN_MASK;
+    float noiseLvl = (userConfigData >> SL_UserCfgInfo::SPL_LSB) & SL_UserCfgInfo::THN_MASK;
+    float pressureLvl = (userConfigData >> SL_UserCfgInfo::PRS_LSB) & SL_UserCfgInfo::PRS_MASK;
+    float aqiLvl = (userConfigData >> SL_UserCfgInfo::AQI_LSB) & SL_UserCfgInfo::AQI_MASK;
+
+    // Fill the new configuration.
+    UserSentryConfig configData;
+    
+    configData.userTemperatureLevelThreshold = temperatureLvl;
+    configData.userHumidityLevelThreshold = humidityLvl;
+    configData.userNoiseLevelThreshold = noiseLvl;
+    configData.userAirQualityIndexThreshold = aqiLvl;
+    configData.userPressureLevelThreshold = pressureLvl;
+
+    // Return.
+    return configData;
+}
+
+void showDecodedData(UserSentryConfig configData) {
+    printf("Prs LVL: %f\n", configData.userPressureLevelThreshold);
+    printf("AQI LVL: %f\n", configData.userAirQualityIndexThreshold);
+    printf("SPL LVL: %f\n", configData.userNoiseLevelThreshold);
+    printf("Hum LVL: %f\n", configData.userHumidityLevelThreshold);
+    printf("Temp LVL: %f\n", configData.userTemperatureLevelThreshold);
+}
+
+UserSentryConfig setConfigData() {
+    UserSentryConfig configData;
+    configData.userAirQualityIndexThreshold = 324;
+    configData.userHumidityLevelThreshold = 98;
+    configData.userNoiseLevelThreshold = 45;
+    configData.userPressureLevelThreshold = 1014;
+    configData.userTemperatureLevelThreshold = 62;
+    return configData;
+}

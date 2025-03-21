@@ -4,27 +4,32 @@
 #define TB9051FTG_H
 
 #include "Motor.h"
+#include "Sentry/main/src/StateManager.h"
 
-void move_sentry_task(void *pvParameters);      // Movment task.
-void walk_algorithm_task(void *pvParameters);   // RW task.
+void user_ctrld_mvmt_task(void *pvTB9051FTG);   // User controlled movement task.
+void erw_mvmt_task(void *pvTB9051FTG);          // Enhanced Random Walk movement task.
 
 /**
  * Represents the TB9051FTG Motor Driver that drives a single
  * motor within the drive system.
  */
-class TB9051FTG{
+class TB9051FTG {
 
     private:
-        Motor leftMotor;    // Left Motor of the Sentry.
-        Motor rightMotor;   // Right Motor of the Sentry.
+        Motor leftMotor;                    // Left Motor of the Sentry.
+        Motor rightMotor;                   // Right Motor of the Sentry.
+        UserDriveCommands *driveCommands;   // Pointer to global instance of user drive command data packet.
+
+        void initTasks();
+        BaseType_t beginUserControlledMovementTask();
+        BaseType_t beginEnhancedRandomWalkMovementTask();
         
     public:
-        TB9051FTG() : 
+        TB9051FTG(UserDriveCommands *driveCommands) : 
             leftMotor(L_MOT_PWM1, L_MOT_PWM2), 
-            rightMotor(R_MOT_PWM1, R_MOT_PWM2) {};
+            rightMotor(R_MOT_PWM2, R_MOT_PWM1),
+            driveCommands(driveCommands) {};
 
-        // Start movement task.
-        void beginMovementTask();
 
         // Initializes the drive system.
         void init();                
@@ -38,11 +43,11 @@ class TB9051FTG{
         // Reverses the Sentry.
         void moveBackward();        
 
-        // Unimplemented. Arcs the Sentry leftwards.
-        void arcLeft();             
+        // Rotate the Sentry leftwards.
+        void rotateLeft();             
 
-        // Unimplemented. Arcs the Sentry rightwards.
-        void arcRight();            
+        // Rotate the Sentry rightwards.
+        void rotateRight();            
 
         /**
          * Stops the Sentry's movement by either braking or coasting. 

@@ -14,73 +14,92 @@ void rx_user_data_task(void *pvReceiver) {
     // Task loop.
     for(;;) {
 
-        // Potentially take semaphore to use app loop.
         _rcvr->receiveSentryLinkUserData();
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(125));
     }
 }
 
 // Pre processing method to call actual reception processor.
 void Receiver::receiveSentryLinkUserData() {
-    AsyncResult *sentryLinkStreamResult = _connManager->getSentryLinkStreamResult();
-    receiveSentryLinkStream(*sentryLinkStreamResult);
+    AsyncResult sentryLinkStreamResult = _connManager->getSentryLinkStreamResult();
+    receiveSentryLinkStream(sentryLinkStreamResult);
+    sentryLinkStreamResult.clear();
 } 
 
 // Stream call back method to process information read from firebase.
-AsyncResultCallback Receiver::receiveSentryLinkStream(AsyncResult &userData) {
-    
+void Receiver::receiveSentryLinkStream(AsyncResult &userData) {
+
     // Do no proccesing if there is nothing to process.
-    if(!userData.isResult()) return NULL;
+    if(!userData.isResult()) return;
+
+    // Deal with repeat events.
+    bool repeatEvent = checkForRepeatedResult(userData);
+    if(repeatEvent) return;
 
     // Deal with non relevant events.
     if (userData.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.eventLog().message().c_str(), userData.eventLog().code());
-    if (userData.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", userData.uid().c_str(), userData.debug().c_str());
-    if (userData.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.error().message().c_str(), userData.error().code());
+    else if (userData.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", userData.uid().c_str(), userData.debug().c_str());
+    else if (userData.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.error().message().c_str(), userData.error().code());
 
     // Deal with availible data.
-    if(userData.available()) {
+    else if(userData.available()) {        
+        // Update the last stream result to avoid repeate processing.
         RealtimeDatabaseResult &RTDB = userData.to<RealtimeDatabaseResult>();
-        if (RTDB.isStream()) {
-            Serial.println("----------------------------");
-            Firebase.printf("task: %s\n", userData.uid().c_str());
-            Firebase.printf("event: %s\n", RTDB.event().c_str());
-            Firebase.printf("path: %s\n", RTDB.dataPath().c_str());
-            Firebase.printf("data: %s\n", RTDB.to<const char *>());
-            Firebase.printf("type: %d\n", RTDB.type());
+        lastReadId = userData.uid();
+        lastReadData = RTDB.to<String>();
 
-            // The stream event from RealtimeDatabaseResult can be converted to the values as following.
-            bool v1 = RTDB.to<bool>();
-            int v2 = RTDB.to<int>();
-            float v3 = RTDB.to<float>();
-            double v4 = RTDB.to<double>();
-            String v5 = RTDB.to<String>();
+        // Notify the appropriate tasks.
+        if (RTDB.isStream()) {
             
+            // Port data received to the proper form for decoding.
+            uint64_t bitsToBeDecoded = RTDB.to<uint64_t>();
+            
+            // Grab the path of the field which was updated and act accordingly
             String fieldPath = RTDB.dataPath().substring(1);
-            Serial.println(fieldPath);
-            
+
+            // Controller field updated.
             if(fieldPath.equals(SL_CTRL_PATH)) {
-                Serial.println("Controller Field Updated. Notify Later.");
-                //xTaskNotify(rx_dpad_handle, -1, eNoAction);
+                Serial.println("Controller Field Updated. Notifying Manual Movement task if needed.");
+                decodeAndUpdateUserDriveCommands((uint32_t) bitsToBeDecoded);
+                if(_stateManager->getSentryMovementState() == MovementState::ms_MANUAL)
+                    xTaskNotify(user_ctrld_mvmt_handle, -1, eNoAction);
             }
+
+            // User threhsold configuration field updated.
             else if(fieldPath.equals(SL_CONFIG_PATH)) {
-                Serial.println("User Configuration Field Updated. Notify Later.");
-                //xTaskNotify(rx_user_config_handle, -1, eNoAction);
+                Serial.println("User Configuration Field Updated. Notifying Update_Thresholds_Task.");
+                decodeAndUpdateUserConfigurationData((uint64_t) bitsToBeDecoded);
+                xTaskNotify(update_thresholds_handle, -1, eNoAction);
             }
+
+            // User in-app activity status updated.
             else if(fieldPath.equals(SL_ACTIVE_PATH)) {
                 Serial.println("User In App Field Updated. Notify Later.");
                 //xTaskNotify(rx_user_config_handle, -1, eNoAction);
             }
-            else Serial.println("Ummm. You're Cooked man.");
+
+            // Deal with altered database paths.
+            else {
+                Serial.println("A previously undefined path was updated. Sentry currently only looks for the following subpaths: ");
+                Serial.printf("%s, %s, and %s\n", SL_CTRL_PATH, SL_CONFIG_PATH, SL_ACTIVE_PATH);
+                Serial.printf("Please add the path :%s to see changes.\n", RTDB.dataPath().c_str());
+                Serial.printf("---------------------------->|%lu|\n", millis());
+                Firebase.printf("task: %s\n", userData.uid().c_str());
+                Firebase.printf("event: %s\n", RTDB.event().c_str());
+                Firebase.printf("path: %s\n", RTDB.dataPath().c_str());
+                Firebase.printf("data: %s\n", RTDB.to<const char *>());
+                Firebase.printf("type: %d\n", RTDB.type());
+            }
         }
+
+        // Display other operations for now. Figure out if it's necessary later.
         else {
             Serial.println("----------------------------");
             Firebase.printf("task: %s, payload: %s\n", userData.uid().c_str(), userData.c_str());
         }
-        Firebase.printf("Free Heap: %d\n", ESP.getFreeHeap());
+        //Firebase.printf("Free Heap: %d\n", ESP.getFreeHeap());
     }
-
-    // Return nothing, the result of this method isn't used.
-    return NULL;    
+    
 }
 
 // Start the receiver.
@@ -89,21 +108,28 @@ void Receiver::begin() {
 }
 
 // Create the tasks to receive user data.
-void Receiver::beginUserDataRxTask() {
-    xTaskCreatePinnedToCore(
-        &rx_user_data_task,     // Pointer to task function.
-        "rx_user_data_task",    // Task name.
-        TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
-        this,                   // Pointer to parameters used for task creation.
-        MAX_PRIORITY,           // Task priority level.
-        &rx_user_data_handle,   // Pointer to task handle.
-        1                       // Core that the task will run on.
+BaseType_t Receiver::beginUserDataRxTask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &rx_user_data_task,             // Pointer to task function.
+        "rx_user_data_task",            // Task name.
+        TaskStackDepth::tsd_RECEIVE,    // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_HIGH,    // Task priority level.
+        &rx_user_data_handle,           // Pointer to task handle.
+        1                               // Core that the task will run on.
     );
+    return res;
 }
 
 // Create all the necessary receiver tasks.
 void Receiver::initTasks() {
-    beginUserDataRxTask();
+    BaseType_t taskCreated;
+
+    taskCreated = beginUserDataRxTask();
+    if(taskCreated != pdPASS) Serial.printf("Receive User Data task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Recieve User Data task created.");
+
 }
 
 /**
@@ -124,37 +150,42 @@ UserDataType Receiver::getDataTypeReceived(String dataPathReceived) {
 }
 
 /**
- * Decodes user configuration data.
+ * Decodes user configuration data and updates the global configuration data packet.
  * @param userConfigData Data to be decoded.
- * @return A UserSentryConfig packet holding the decoded data.
  */
-UserSentryConfig Receiver::decodeUserConfigurationData(uint64_t userConfigData) {
+void Receiver::decodeAndUpdateUserConfigurationData(uint64_t userConfigData) {
+
+    Serial.printf("Data to be decoded: %ld\n", userConfigData);
 
     // Decode.
-    float temperatureLvl = (userConfigData >> SL_UserCfgInfo::TMP_LSB) & SL_UserCfgInfo::THN_MASK;
-    float humidityLvl = (userConfigData >> SL_UserCfgInfo::HUM_LSB) & SL_UserCfgInfo::THN_MASK;
     float noiseLvl = (userConfigData >> SL_UserCfgInfo::SPL_LSB) & SL_UserCfgInfo::THN_MASK;
     float pressureLvl = (userConfigData >> SL_UserCfgInfo::PRS_LSB) & SL_UserCfgInfo::PRS_MASK;
-    float aqiLvl = (userConfigData >> SL_UserCfgInfo::AQI_LSB) & SL_UserCfgInfo::AQI_MASK;
+    float temperatureLvl = (userConfigData >> SL_UserCfgInfo::TMP_LSB) & SL_UserCfgInfo::THN_MASK;
+    float humidityLvl = (userConfigData >> SL_UserCfgInfo::HUM_LSB) & SL_UserCfgInfo::THN_MASK;
+    float aqiLvl = (userConfigData >> SL_UserCfgInfo::AQI_LSB) & SL_UserCfgInfo::AQI_HPE_MASK;
+    float hpeLvl = (userConfigData >> SL_UserCfgInfo::HPE_LSB) & SL_UserCfgInfo::AQI_HPE_MASK;
 
-    // Fill the new configuration.
-    UserSentryConfig configData;
-    configData.userAirQualityIndexThreshold = aqiLvl;
-    configData.userHumidityLevelThreshold = humidityLvl;
-    configData.userNoiseLevelThreshold = noiseLvl;
-    configData.userPressureLevelThreshold = pressureLvl;
-    configData.userTemperatureLevelThreshold = temperatureLvl;
+    // Fill the global configuration pacaket.
+    userConfiguration->userAirQualityIndexThreshold = aqiLvl;
+    userConfiguration->userHumidityLevelThreshold = humidityLvl;
+    userConfiguration->userNoiseLevelThreshold = noiseLvl;
+    userConfiguration->userPressureLevelThreshold = pressureLvl;
+    userConfiguration->userTemperatureLevelThreshold = temperatureLvl;
+    userConfiguration->userPresenceEstimationThreshold = hpeLvl;
 
-    // Return.
-    return configData;
+    Serial.printf("Temperature Level Threshold: %.2f\n", userConfiguration->userTemperatureLevelThreshold);
+    Serial.printf("Humidity Level Threshold: %.2f\n", userConfiguration->userHumidityLevelThreshold);
+    Serial.printf("Noise Level Threshold: %.2f\n", userConfiguration->userNoiseLevelThreshold);
+    Serial.printf("Pressure Level Threshold: %.2f\n", userConfiguration->userPressureLevelThreshold);
+    Serial.printf("Air Quality Index Threshold: %.2f\n", userConfiguration->userAirQualityIndexThreshold);
+    Serial.printf("Human Presence Estimation Threshold: %.2f\n", userConfiguration->userPresenceEstimationThreshold);
 }
 
 /**
- * Decodes user drive command data.
+ * Decodes user drive command data and updates the global drive data packet.
  * @param UserDriveCommandData Data to be decoded.
- * @return A UserDriveCommands packet holding the decoded data.
  */
-UserDriveCommands Receiver::decodeUserDriveCommands(uint32_t UserDriveCommandData) {
+void Receiver::decodeAndUpdateUserDriveCommands(uint32_t UserDriveCommandData) {
 
     // Decode initial data.
     bool ctrlPower = (UserDriveCommandData >> SL_ctrlInfo::ACTIVE_LSB) & SL_ctrlInfo::ACTIVE_MASK;
@@ -171,21 +202,19 @@ UserDriveCommands Receiver::decodeUserDriveCommands(uint32_t UserDriveCommandDat
     bool dpadL = (dpadField == SL_ctrlInfo::DPAD_L);
     bool dpadR = (dpadField == SL_ctrlInfo::DPAD_R);
 
-    // Fill the new configuration.
-    UserDriveCommands driveData;
-    driveData.active = ctrlPower;
-    driveData.usingDpad = usingDpad;
-    driveData.usingJoystick = usingJoystick;
-    driveData.dpad_Forward = dpadU;
-    driveData.dpad_Backward = dpadD;
-    driveData.dpad_Left = dpadL;
-    driveData.dpad_Right = dpadR;
-    driveData.joystick_X = joystickX;
-    driveData.joystick_Y = joystickY;
+    // Fill the global configuration packet.
+    userMovementCommands->active = ctrlPower;
+    userMovementCommands->usingDpad = usingDpad;
+    userMovementCommands->usingJoystick = usingJoystick;
+    userMovementCommands->dpad_Forward = dpadU;
+    userMovementCommands->dpad_Backward = dpadD;
+    userMovementCommands->dpad_Left = dpadL;
+    userMovementCommands->dpad_Right = dpadR;
+    userMovementCommands->joystick_X = joystickX;
+    userMovementCommands->joystick_Y = joystickY;
 
-    // Return.
-    return driveData;
 }
+
 
 /**
  * Callback method that responds to the BLE Client connecting to 
@@ -247,4 +276,17 @@ bool Receiver::checkIfBLEDataAvailible(UserDataType udtData) {
     }
 
     return res;
+}
+
+bool Receiver::checkForRepeatedResult(AsyncResult res) {
+    RealtimeDatabaseResult &db_res = res.to<RealtimeDatabaseResult>();
+
+    bool sameIds = lastReadId.equals(res.uid());
+    bool sameData = lastReadData.equals(db_res.to<String>());
+
+    if(!sameIds || !sameData) {
+        //Serial.printf("ID Difference[%s == %s]\n", res.uid().c_str(), lastReadId.c_str());
+        //Serial.printf("Data Difference[%s == %s]\n", db_res.to<String>().c_str(), lastReadData.c_str());
+    }
+    return (sameIds && sameData);
 }

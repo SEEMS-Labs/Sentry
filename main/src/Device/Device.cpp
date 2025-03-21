@@ -3,9 +3,9 @@
 void Device::begin() {
     
     // Initialize Sentry Subsystems.
-    initCommunicationSystem();
     initSensorSystem();
     initDriveSystem();
+    initCommunicationSystem();
 }
 
 void Device::sleep_mode_1() {
@@ -61,11 +61,19 @@ void Device::test_bme_and_mic_data_to_firebase() {
         Serial.println(".");
         delay(500);
     }
+
     _communication_system.begin();
     _sensor_system.initMic();
     _sensor_system.initBME();
-    _sensor_system.beginReadBMETask();
-    _sensor_system.beginReadMicrophoneTask();
+
+    BaseType_t taskCreated;
+    taskCreated = _sensor_system.beginReadBMETask();
+    if(taskCreated != pdPASS) Serial.printf("Read BME task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Read BME task created.");
+
+    taskCreated = _sensor_system.beginReadMicrophoneTask();
+    if(taskCreated != pdPASS) Serial.printf("Read Mic task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Read Mic task created.");
 }
 
 void Device::test_US() {
@@ -99,6 +107,7 @@ void Device::loop() {
 }
 
 void Device::test_bme_data_to_serial() {
+    _sensor_system.initBME();
     _sensor_system.beginReadBMETask();
 }
 
@@ -137,9 +146,56 @@ void Device::test(){
         Serial.println(".");
         delay(500);
     }
+
+    UBaseType_t taskCount = uxTaskGetNumberOfTasks();
+    Serial.printf("Number of running tasks Before: %d\n", taskCount);
+
+    _sensor_system.beginUpdateThresholdTask();
+    Serial.println("Update threshold task initializd.");
+
     _communication_system.begin();
+    Serial.println("Comms System Initialized.");
+
     _sensor_system.initMic();
+    Serial.println("Mic Initialized.");
+
     _sensor_system.initBME();
+    Serial.println("BME Initialized.");
+    
     _sensor_system.beginReadBMETask();
+    Serial.println("BME Task Initialized.");
+
     _sensor_system.beginReadMicrophoneTask();
+    Serial.println("Mic Task Initialized.");
+
+    taskCount = uxTaskGetNumberOfTasks();
+    Serial.printf("Number of running tasks After: %d\n", taskCount);
+
+    StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
+
 }
+
+void Device::showTaskMemoryUsage() {
+
+    UBaseType_t poll_us_mem_left = uxTaskGetStackHighWaterMark(poll_US_handle);
+    UBaseType_t poll_mic_mem_left = uxTaskGetStackHighWaterMark(poll_mic_handle);
+    UBaseType_t poll_bme_mem_left = uxTaskGetStackHighWaterMark(poll_bme_handle);
+    UBaseType_t tx_bme_data_mem_left = uxTaskGetStackHighWaterMark(tx_bme_data_handle);
+    UBaseType_t tx_mic_data_mem_left = uxTaskGetStackHighWaterMark(tx_mic_data_handle);
+    UBaseType_t tx_alerts_mem_left = uxTaskGetStackHighWaterMark(tx_alerts_handle);
+    UBaseType_t rx_user_data_mem_left = uxTaskGetStackHighWaterMark(rx_user_data_handle);
+    UBaseType_t user_ctrld_mvmt_mem_left = uxTaskGetStackHighWaterMark(user_ctrld_mvmt_handle);
+    UBaseType_t walk_algo_mem_left = uxTaskGetStackHighWaterMark(erw_mvmt_handle);
+
+    Serial.printf("poll_us_mem_left: \t%u bytes\n", poll_us_mem_left);
+    Serial.printf("poll_mic_mem_left: \t%u bytes\n", poll_mic_mem_left);
+    Serial.printf("poll_bme_mem_left: \t%u bytes\n", poll_bme_mem_left);
+    Serial.printf("tx_bme_data_mem_left: \t%u bytes\n", tx_bme_data_mem_left);
+    Serial.printf("tx_mic_data_mem_left: \t%u bytes\n", tx_mic_data_mem_left);
+    Serial.printf("tx_alerts_mem_left: \t%u bytes\n", tx_alerts_mem_left);
+    Serial.printf("rx_user_data_mem_left: \t%u bytes\n", rx_user_data_mem_left);
+    Serial.printf("user_mvmt_mem_left: \t%u bytes\n", user_ctrld_mvmt_mem_left);
+    Serial.printf("walk_algo_mem_left: \t%u bytes\n", walk_algo_mem_left);
+
+}
+

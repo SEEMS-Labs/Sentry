@@ -5,10 +5,17 @@
 
 // Grab libraries. 
 #include "SensorInterface.h"
+#include "Sentry/main/src/StateManager.h"
+#pragma once
+#include "Sentry/main/src/Sensors/SensorManager.h"
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include <Arduino.h>
 #include <bsec.h>
 #include <Wire.h>
+#include <Preferences.h>
+
+// Forward definition of SensorManager.
+class SensorManager;
 
 /**
  * Class that represents the BME688 Environmental Sensor Module 
@@ -63,23 +70,29 @@ class BME688 : public SensorInterface {
          */
         bsec_virtual_sensor_t currentVirtualSensor = BSEC_OUTPUT_IAQ;
 
-        int iaqIndex = 0;           // IAQ history buffer index.
-        float pastIAQ[bufferSize];  // IAQ history buffer.
+        int iaqIndex = 0;                   // IAQ history buffer index.
+        float pastIAQ[bufferSize];          // IAQ history buffer.
+        float iaqThreshold = DEF_AQI_LIM;   // IAQ threshold.
 
-        int co2Index = 0;           // CO2 history buffer index.
-        float pastCO2[bufferSize];  // CO2 history buffer.
+        int co2Index = 0;                   // CO2 history buffer index.
+        float pastCO2[bufferSize];          // CO2 history buffer.
+        //float co2Threshold = DEF_CO2_LIM;   // CO2 Threshold.
 
-        int pressureIndex = 0;          // Pressure history buffer index.
-        float pastPressure[bufferSize]; // Pressure history buffer.
+        int pressureIndex = 0;                  // Pressure history buffer index.
+        float pastPressure[bufferSize];         // Pressure history buffer.
+        float pressureThreshold = DEF_PRES_LIM; // Pressure threshold.
 
-        int vocIndex = 0;           // VOC history buffer index.
-        float pastVOC[bufferSize];  // VOC history buffer.
+        int vocIndex = 0;                   // VOC history buffer index.
+        float pastVOC[bufferSize];          // VOC history buffer.
+        //float vocThreshold = DEF_VOC_LIM;   // VOC threshold.
 
-        int tempIndex = 0;          // Temperature history buffer index.
-        float pastTemp[bufferSize]; // Temperature history buffer.
+        int tempIndex = 0;                  // Temperature history buffer index.
+        float pastTemp[bufferSize];         // Temperature history buffer.
+        float tempThreshold = DEF_TEMP_LIM; // Temperature threshold.
 
-        int humIndex = 0;               // Humidity history buffer index.
-        float pastHumidity[bufferSize]; // Humidity history buffer.
+        int humIndex = 0;                   // Humidity history buffer index.
+        float pastHumidity[bufferSize];     // Humidity history buffer.
+        float humThreshold = DEF_HUM_LIM;   // Humidity threshold.
 
         /**
          * BSEC BME688 output metrics (virtual sensors) list.
@@ -92,14 +105,22 @@ class BME688 : public SensorInterface {
             BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
             BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY
         };
+
+        SensorManager *sensorManager;
+        void setThresholdFromPreferences(Preferences preferences);
+        void setThresholdAndUpdatePreferences(Preferences preferences);
         
     public:
         /**
          * Defines the sensors pins I2C pins for initialization.
-         * @param sdi Serial Data In 
-         * @param sck Serial Clock 
+         * @param sdi Serial Data In.
+         * @param sck Serial Clock.
+         * @param sensorManager Pointer to this BME688's overseer.
          */
-        BME688(int sdi, int sck) : sdi(sdi), sck(sck) {}
+        BME688(int sdi, int sck, SensorManager *sensorManager) : 
+            sdi(sdi), 
+            sck(sck), 
+            sensorManager(sensorManager) {}
 
         /**
          * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
@@ -122,6 +143,12 @@ class BME688 : public SensorInterface {
          * Mark a sensor as irrelevant for output collection.
          */
         void disable();
+
+        /**
+         * Set the thresholds of this BME688 from memory.
+         * @param preferences Access to Sentry NVM (permanent memory).
+         */
+        void setThresholds(Preferences preferences);
 
         /**
          * Signal that this BME688 has passed its threshold(s).
@@ -188,6 +215,11 @@ class BME688 : public SensorInterface {
          * Set the virtual sensor type for reading and measuring.
          */
         void setCurrentVirtualSensor(bsec_virtual_sensor_t virtualSensor);
+
+        float getAqiThreshold();
+        float getTempThreshold();
+        float getHumThreshold();
+        float getPresThreshold();
 };
 
 // End include gaurd.

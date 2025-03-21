@@ -30,9 +30,10 @@ class Device {
             SensorData *envData,                                    // Address to the global environmental data packet.
             Alerts *envStatus,                                      // Address to the global alerts data packet.
             UserSentryConfig *userConfiguration,                    // Address to the global custom user sentry configuration data packet.
-            UserDriveCommands *userMovementCommands) :              // Address to the global user movement commands data packet.
+            UserDriveCommands *userMovementCommands,                // Address to the global user movement commands data packet.
+            ObstacleData *obstacleInfo) :                           // Address to the global obstacle data packet.
             _communication_system(envData, envStatus, userConfiguration, userMovementCommands),
-            _sensor_system(envData, envStatus),
+            _sensor_system(envData, envStatus, userConfiguration, obstacleInfo),
             _stateManager(StateManager::getManager()) {}
 
         // Start the Sentry.
@@ -54,6 +55,7 @@ class Device {
         
         ConnectivityManager _get_manager() { return _communication_system; }
         
+        void showTaskMemoryUsage();
         void test();
         void testComms();
         void test_bme_data_to_serial();

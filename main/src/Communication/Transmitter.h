@@ -56,9 +56,9 @@ class Transmitter {
 
         // Initialize the tasks of the transmitter.
         void initTasks();
-        void beginBmeTxTask();
-        void beginMicTxTask();
-        void beginAlertsTxTask();
+        BaseType_t beginBmeTxTask();
+        BaseType_t beginMicTxTask();
+        BaseType_t beginAlertsTxTask();
 
     public:
         Transmitter(SensorData *envData, Alerts *envStatus, ConnectivityManager *_manager) : 

@@ -32,18 +32,23 @@ class Receiver : public BLEServerCallbacks, public BLECharacteristicCallbacks {
         String bleDataBuffer = "";                  // Buffer of data received from BLE client.
 
         // Firebase Reception material.
+        String lastReadData = "";
+        String lastReadId = "";
+        bool checkForRepeatedResult(AsyncResult res);
+        void receiveSentryLinkStream(AsyncResult &userData);
         UserDataType getDataTypeReceived(String dataPathReceieved);
-        UserSentryConfig decodeUserConfigurationData(uint64_t userConfigData);
-        UserDriveCommands decodeUserDriveCommands(uint32_t UserDriveCommandData);
-
+        void decodeAndUpdateUserConfigurationData(uint64_t userConfigData);
+        void decodeAndUpdateUserDriveCommands(uint32_t UserDriveCommandData);
+        
         // Initialize the tasks of the receiver.
         void initTasks();
-        void beginUserDataRxTask();
+        BaseType_t beginUserDataRxTask();
 
     public:
         Receiver(UserSentryConfig *userConfiguration, UserDriveCommands *userMovementCommands, ConnectivityManager *_manager) : 
             userConfiguration(userConfiguration), 
             userMovementCommands(userMovementCommands),
+            _connManager(_manager),
             _stateManager(StateManager::getManager()) {};
         
         /** 
@@ -81,7 +86,7 @@ class Receiver : public BLEServerCallbacks, public BLECharacteristicCallbacks {
         void onWrite(BLECharacteristic *pCharacteristic) override;
 
         void receiveSentryLinkUserData();
-        AsyncResultCallback receiveSentryLinkStream(AsyncResult &userData);
+
 };
 
 #endif /* Receiver.h */

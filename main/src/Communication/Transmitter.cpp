@@ -39,16 +39,16 @@ void tx_bme_data_task(void *pvTransmitter) {
         ulTaskNotifyTake(
             pdTRUE,             // Clear notification bits on exit..
             portMAX_DELAY);     // Time to wait for notif to be recieved. Setting this as Max delay 
-                                // functionally means a seperate dealy isn't required.
+                                // functionally means a seperate delay isn't required.
 
         // Take firebase app mutex for uniterrupted transmission.
         if(xSemaphoreTake(firebase_app_mutex, portMAX_DELAY) == pdTRUE) {
-            Serial.printf("Time Elapsed since last BME Transmit: %lu\n", millis() - lastTime);
-            Serial.println("<-- FBAPP Mutex (BME Tx Took).");
+            //Serial.printf("Time Elapsed since last BME Transmit: %lu\n", millis() - lastTime);
+            //Serial.println("<-- FBAPP Mutex (BME Tx Took).");
             transmitter->transmitSensorData(DataTransmissionType::tx_BME_DATA);
             xSemaphoreGive(firebase_app_mutex);
             lastTime = millis();
-            Serial.println("--> FBAPP Mutex (BME Tx Gave).");
+            //Serial.println("--> FBAPP Mutex (BME Tx Gave).");
         }
         else Serial.println("FBAPP unavailible. Waiting. (Tx Task)");
         
@@ -72,12 +72,12 @@ void tx_mic_data_task(void *pvTransmitter) {
 
         // Take firebase app mutex for uniterrupted transmission.
         if(xSemaphoreTake(firebase_app_mutex, portMAX_DELAY) == pdTRUE) {
-            Serial.printf("Time Elapsed since last MIC Transmit: %lu\n", millis() - lastTime);
-            Serial.println("<-- FBAPP Mutex (MIC Tx Took).");
+            //Serial.printf("Time Elapsed since last MIC Transmit: %lu\n", millis() - lastTime);
+            //Serial.println("<-- FBAPP Mutex (MIC Tx Took).");
             transmitter->transmitSensorData(DataTransmissionType::tx_MIC_DATA);
             xSemaphoreGive(firebase_app_mutex);
             lastTime = millis();
-            Serial.println("--> FBAPP Mutex (Mic Tx Gave).");
+            //Serial.println("--> FBAPP Mutex (Mic Tx Gave).");
         }
         else Serial.println("FBAPP unavailible. Waiting. (Mic Tx Task)");
         
@@ -150,7 +150,7 @@ void Transmitter::updateFirebase(String writeAddress, DataTransmissionType dtt) 
     
         // General environmental data transmission.
         if(dtt == DataTransmissionType::tx_BME_DATA || dtt == DataTransmissionType::tx_MIC_DATA) {
-            Serial.println("Transmitting sensor readings to Firebase");
+            //Serial.println("Transmitting sensor readings to Firebase");
             switch(dtt) {
                 // BME Data transmission.
                 case DataTransmissionType::tx_BME_DATA :
@@ -187,48 +187,64 @@ void Transmitter::updateFirebase(String writeAddress, DataTransmissionType dtt) 
  * Transmit Alerts and Transmit Sensor Data.
  */
 void Transmitter::initTasks() {
-    beginBmeTxTask();
-    beginMicTxTask();
-    beginAlertsTxTask();
+    BaseType_t taskCreated;
+    taskCreated = beginBmeTxTask();
+    if(taskCreated != pdPASS) Serial.printf("Transmit BME Data task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Transmit BME Data created.");
+
+    taskCreated = beginMicTxTask();
+    if(taskCreated != pdPASS) Serial.printf("Transmit Mic Data task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Transmit Mic Data task created.");
+
+    taskCreated = beginAlertsTxTask();
+    if(taskCreated != pdPASS) Serial.printf("Transmit Alert Data task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Transmit Alert Data task created.");
+
 }
 
 // Create the task to transmit environmental data.
-void Transmitter::beginBmeTxTask() {  
-    xTaskCreatePinnedToCore(
-        &tx_bme_data_task,      // Pointer to task function.
-        "tx_bme_data_Task",     // Task name.
-        TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
-        this,                   // Pointer to parameters used for task creation.
-        MAX_PRIORITY,           // Task priority level.
-        &tx_bme_data_handle,    // Pointer to task handle.
-        1                       // Core that the task will run on.
+BaseType_t Transmitter::beginBmeTxTask() {  
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &tx_bme_data_task,              // Pointer to task function.
+        "tx_bme_data_Task",             // Task name.
+        TaskStackDepth::tsd_TRANSMIT,   // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_HIGH,    // Task priority level.
+        &tx_bme_data_handle,            // Pointer to task handle.
+        1                               // Core that the task will run on.
     );
+    return res;
 }
 
 // Create the task to transmit microphone data.
-void Transmitter::beginMicTxTask() {
-    xTaskCreatePinnedToCore(
-        &tx_mic_data_task,      // Pointer to task function.
-        "tx_mic_data_Task",     // Task name.
-        TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
-        this,                   // Pointer to parameters used for task creation.
-        MAX_PRIORITY,           // Task priority level.
-        &tx_mic_data_handle,    // Pointer to task handle.
-        1                       // Core that the task will run on.
+BaseType_t Transmitter::beginMicTxTask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &tx_mic_data_task,              // Pointer to task function.
+        "tx_mic_data_Task",             // Task name.
+        TaskStackDepth::tsd_TRANSMIT,   // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_HIGH,    // Task priority level.
+        &tx_mic_data_handle,            // Pointer to task handle.
+        1                               // Core that the task will run on.
     );
+    return res;
 }
 
 // Create the task to transmit environmental alerts. 
-void Transmitter::beginAlertsTxTask() {
-    xTaskCreatePinnedToCore(
-        &tx_alerts_task,        // Pointer to task function.
-        "tx_alerts_Task",       // Task name.
-        TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
-        this,                   // Pointer to parameters used for task creation.
-        MEDIUM_PRIORITY,        // Task priority level.
-        &tx_alerts_handle,      // Pointer to task handle.
-        1                       // Core that the task will run on.
+BaseType_t Transmitter::beginAlertsTxTask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &tx_alerts_task,                // Pointer to task function.
+        "tx_alerts_Task",               // Task name.
+        TaskStackDepth::tsd_TRANSMIT,   // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_MEDIUM,  // Task priority level.
+        &tx_alerts_handle,              // Pointer to task handle.
+        1                               // Core that the task will run on.
     );
+    return res;
 }
 
 /**

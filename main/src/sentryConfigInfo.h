@@ -69,7 +69,7 @@
 #define R_MOT_OCM   38      // Right Motor Driver Current Sense Output Pin.
 
 /*********************************************************
-                ALERT DEFAULT THRESHOLDS
+                ALERT THRESHOLDS
 **********************************************************/
 #define DEF_AQI_LIM 151     // Default Air Quality Threshold (in AQI scale).
 #define DEF_NOISE_LIM 80    // Default Noise Level Threshold (in dB).
@@ -77,9 +77,26 @@
 #define DEF_HUM_LIM 90      // Default Humidity Level Threshold (in relative humidity %).
 #define DEF_PRES_LIM 1200   // Default Pressure Level Threshold (in hPa).
 #define DEF_HP_EST_LIM 150  // Default Human Presence Estimation Threshold (in inches).
-#define DEF_CO2_LIM 2500    // Default CO2 Level Threshold (in ppm).
-#define DEF_VOC_LIM 20      // Default bVOC Level Threshold (in ppm).
+//#define DEF_CO2_LIM 2500    // Default CO2 Level Threshold (in ppm).
+//#define DEF_VOC_LIM 20      // Default bVOC Level Threshold (in ppm).
 
+#define MAX_AQI 500
+#define MIN_AQI 50
+
+#define MAX_NOISE 120
+#define MIN_NOISE 80
+
+#define MAX_TEMP 85     // In degrees Celsius.
+#define MIN_TEMP -40
+
+#define MAX_HPE 150     // Inches.
+#define MIN_HPE 24      
+
+#define MAX_HUM 100     // Percent.
+#define MIN_HUM 0
+
+#define MAX_PRES 1100   // hPa.
+#define MIN_PRES 300    
 
 /*********************************************************
             COMMUNICATION CONFIGURATION
@@ -146,7 +163,7 @@ struct _alertData {
 #define HUMIDITY_BREACHED_MASK      0x20
 
 // Data packet that holds sentry obstacle detection data.
-typedef struct _obstcleDetectionData Obstacles;
+typedef struct _obstcleDetectionData ObstacleData;
 struct _obstcleDetectionData {
     Status frontObstacleDetected;
     Status backObstacleDetected;
@@ -176,7 +193,10 @@ struct _userSentryConfig {
     SensorReading userTemperatureLevelThreshold;
     SensorReading userHumidityLevelThreshold;
     SensorReading userPressureLevelThreshold;
+    SensorReading userCO2LevelThreshold;
+    SensorReading userVOCLevelThreshold;
     SensorReading userNoiseLevelThreshold;
+    SensorReading userPresenceEstimationThreshold;
 };
 
 /**
@@ -229,14 +249,15 @@ struct _userDriveCommands {
  * Access information for the sentry link user configuration path being read in firebase.
  */
 enum SL_UserCfgInfo {
-    THN_MASK =  0x007F,     // Mask for retrieving Temp/Hum/Noise thresholds from the Sentrylink user configuration address.
-    PRS_MASK =  0x07FF,     // Mask for retrieving Pressure thresholds from the Sentrylink user configuration address.
-    AQI_MASK =  0x01FF,     // Mask for retrieving Air Quality thresholds from the Sentrylink user configuration address.
-    TMP_LSB =   0,          // LSB of the Temperature threshold field within Sentrylink user configuration address.
-    HUM_LSB =   7,          // LSB of the Humidity threshold field within Sentrylink user configuration address.
-    SPL_LSB =   14,         // LSB of the Noise threshold field within Sentrylink user configuration address.
-    PRS_LSB =   30,         // LSB of the Pressure threshold field within Sentrylink user configuration address.
-    AQI_LSB =   21,         // LSB of the Air Quality threshold field within Sentrylink user configuration address.
+    THN_MASK = 0x007F,      // Mask for retrieving Temp/Hum/Noise thresholds from the Sentrylink user configuration address.
+    PRS_MASK = 0x07FF,      // Mask for retrieving Pressure thresholds from the Sentrylink user configuration address.
+    AQI_HPE_MASK = 0x01FF,  // Mask for retrieving Air Quality and Human Presence Estimation thresholds from the Sentrylink user configuration address.
+    TMP_LSB = 0,            // LSB of the Temperature threshold field within Sentrylink user configuration address.
+    HUM_LSB = 7,            // LSB of the Humidity threshold field within Sentrylink user configuration address.
+    SPL_LSB = 14,           // LSB of the Noise threshold field within Sentrylink user configuration address.
+    HPE_LSB = 21,           // LSB of the Human Presence Estimation threshold field within Sentrylink user configuration address.
+    AQI_LSB = 30,           // LSB of the Air Quality threshold field within Sentrylink user configuration address.
+    PRS_LSB = 39            // LSB of the Pressure threshold field within Sentrylink user configuration address.
 };
 
 // Represents different types of data received from SentryLink.
@@ -267,14 +288,11 @@ enum class BLETransmitCode : unsigned short {
 /*********************************************************
                     Tasks Handles and Materials
 **********************************************************/
-#define TASK_STACK_DEPTH 16384  // Max stack size.
-#define MAX_PRIORITY 10         // Max task priority.
-#define MEDIUM_PRIORITY 5       // Medium task priority.
-#define LOW_PRIORITY 1          // Low task priority.
-
-extern TaskHandle_t poll_US_handle;     // Task handle for polling the ultrasonic sensors.
-extern TaskHandle_t poll_mic_handle;    // Task handle for polling the microphone's analog output.
-extern TaskHandle_t poll_bme_handle;    // Task handle for polling the BME688.
+extern SemaphoreHandle_t user_config_mutex;    
+extern TaskHandle_t update_thresholds_handle;   // Task Handle for updating the sensor thresholds to user specifications.
+extern TaskHandle_t poll_US_handle;             // Task handle for polling the ultrasonic sensors.
+extern TaskHandle_t poll_mic_handle;            // Task handle for polling the microphone's analog output.
+extern TaskHandle_t poll_bme_handle;            // Task handle for polling the BME688.
 
 extern SemaphoreHandle_t firebase_app_mutex;    // Semaphore Handle for mutex gaurding access to Firebase app for Transmission.
 extern TaskHandle_t tx_bme_data_handle;         // Task handle to transmit sentry BME688 readings to firebase.
@@ -282,8 +300,27 @@ extern TaskHandle_t tx_mic_data_handle;         // Task handle to transmit sentr
 extern TaskHandle_t tx_alerts_handle;           // Task handle to transmit sentry alert data to firebase.
 extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user config and command data from firebase/bluetooth.
 
-extern TaskHandle_t move_sentry_handle;         // Task handle to control motors.
-extern TaskHandle_t walk_algorithm_handle;      // Task handle to Enhance Random Walk algo.
+extern TaskHandle_t user_ctrld_mvmt_handle;     // Task handle to control motors via user direction.
+extern TaskHandle_t erw_mvmt_handle;            // Task handle to control motors via Enhanced Random Walk algo.
+
+// Size of the stack allocated on the heap to a task (in bytes).
+enum TaskStackDepth {
+    tsd_POLL = 6000,        // Size given to tasks who read sensors.
+    tsd_SET = 5000,         // Size given to tasks who simply set values.
+    tsd_TRANSMIT = 6000,    // Size given to tasks who transmit information to firebase.
+    tsd_RECEIVE = 8000,     // Size given to tasks who receive information from firebase.
+    tsd_DRIVE = 10000,      // Size given to tasks who drive the Sentry's Locomotion.
+    tsd_MAX = 16384         // Maximum size given to a task.
+};
+
+// Priority level of a task.
+enum TaskPriorityLevel {
+    tpl_LOW = 1,
+    tpl_MEDIUM_LOW = 5,
+    tpl_MEDIUM = 10,
+    tpl_MEDIUM_HIGH = 15,
+    tpl_HIGH = 20
+};
 
 /*********************************************************
                 Task Notification Values
@@ -338,20 +375,35 @@ enum class _network_connectivity_states {
     ns_BLE          // Representative of Sentry being connected to BLE Client only.
 };
 
+enum class _sensor_threshold_states {
+    ts_PRE_STARTUP,     // Representative of Sentry not yet having examined sensor threshold preferences.
+    ts_POST_STARTUP     // Reperesentative of Sentry already having examined sensor threshold preferences.
+};
+
 using MovementState = _movement_states;
 using DataTransmissionState = _data_transmission_states;
 using WakeState = _wake_states;
 using PowerState = _power_states;
 using StartupState = _startup_states;
 using ConnectionState = _network_connectivity_states;
-
+using ThresholdState = _sensor_threshold_states;
 
 /*********************************************************
                 Sentry Preferences (NVS Memory)
 **********************************************************/
-#define PREF_CREDS "credentials"
-#define PREF_CREDS_SSID "SSID"
-#define PREF_CREDS_PASS "PASS"
+#define PREF_CREDS "credentials"    // Wi-Fi crediential namespace.
+#define PREF_CREDS_SSID "SSID"      // Wi-Fi SSID key.
+#define PREF_CREDS_PASS "PASS"      // Wi-Fi Password key.
+
+#define PREF_SENSOR_THDS "SENSOR_THDS"  // Sensor threshold namespace.
+#define PREF_IAQ_THD "IAQ_THD"          // IAQ threshold key.
+#define PREF_CO2_THD "CO2_THD"          // CO2 threshold key.
+#define PREF_PRES_THD "PRS_THD"         // Pressure threshold key.
+#define PREF_VOC_THD "VOC_THD"          // VOC threshold key.
+#define PREF_TEMP_THD "TMP_THD"         // Temperature threshold key.
+#define PREF_HUM_THD "HUM_THD"          // Humidity threshold key.
+#define PREF_SPL_THD "SPL_THD"          // DeciBel SPL threshold key.
+#define PREF_HPE_THD "HPE_THD"          // Human Presence Estismation threshold key.
 
 // End include gaurd.
 #endif /*sentryConfigInfo.h*/

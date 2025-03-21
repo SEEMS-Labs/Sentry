@@ -5,7 +5,14 @@
 // Grab libraries. 
 #include "SensorInterface.h"
 #include "Sentry/main/src/sentryConfigInfo.h"
+#include "Sentry/main/src/StateManager.h"
+#pragma once
+#include "Sentry/main/src/Sensors/SensorManager.h"
 #include <Arduino.h>
+#include <Preferences.h>
+
+// Forward definition of SensorManager.
+class SensorManager;
 
 /**
  * Class representing the HC-SR04 Ultrasonic Sensors used as obstacle and presence detectors.
@@ -31,12 +38,12 @@ class HCSR04 : public SensorInterface {
         /**
          * The distance from the sensor (in inches) that an obstacle must be to be "detected".
          */
-        float obstacleDetectionThreshold;
+        float obstacleDetectionThreshold = -1.0;
 
         /**
          * The distance from the sensor (in inches) that an object/person must be to be "detected".
          */
-        float presenceDetectionThreshold = 24;
+        float presenceDetectionThreshold = DEF_HP_EST_LIM;
 
         /**
          * Quantifies if this sensor is on or not (should be polled or not).
@@ -71,6 +78,10 @@ class HCSR04 : public SensorInterface {
          */
         float computeInches();
 
+        SensorManager *sensorManager;
+        void setThresholdFromPreferences(Preferences preferences);
+        void setThresholdAndUpdatePreferences(Preferences preferences);
+
     public:
         /**
          * Defines the sensors pins and connects them to the ESP32, and sets the thresholds of a sensor.
@@ -79,7 +90,12 @@ class HCSR04 : public SensorInterface {
          * @param id The unique Id for this ultrasonic sensor.
          * @param obstacleDetectionThreshold The distance from the sensor (in inches) that an obstacle must be to be "detected".
          */
-        HCSR04(int trigger, int echo, int id, int obstacleDetectionThreshold) : trigger(trigger), echo(echo), id(id), obstacleDetectionThreshold(obstacleDetectionThreshold) {};
+        HCSR04(int trigger, int echo, int id, int obstacleDetectionThreshold, SensorManager *sensorManager) : 
+            trigger(trigger), 
+            echo(echo), 
+            id(id), 
+            obstacleDetectionThreshold(obstacleDetectionThreshold), 
+            sensorManager(sensorManager) {};
 
         /**
          * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
@@ -102,6 +118,12 @@ class HCSR04 : public SensorInterface {
          * Mark a sensor as irrelevant for output collection.
          */
         void disable() override;
+
+        /**
+         * Set this ultrasonic sensors human presence estimation threshold.
+         * @param preferences Access to Sentry NVM (permanent memory).
+         */
+        void setThreshold(Preferences preferences);
 
         /**
          * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.

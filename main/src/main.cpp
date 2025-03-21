@@ -1,7 +1,7 @@
 // External libraries.
 #include <Arduino.h>
 
-/*
+///*
 // Internal headers.
 #include "sentryConfigInfo.h"
 #include "Device.h"
@@ -11,13 +11,16 @@ SensorData outgoingData;
 Alerts outgoingAlerts;
 UserSentryConfig incomingUserConfig;
 UserDriveCommands incomingUserCommands;
+ObstacleData obstacleInfo;
 
 // Create Sentry.
-Device sentry(&outgoingData, &outgoingAlerts, &incomingUserConfig, &incomingUserCommands);
+Device sentry(&outgoingData, &outgoingAlerts, &incomingUserConfig, &incomingUserCommands, &obstacleInfo);
 
+char *buffer;
 void setup() {
     Serial.begin(BAUD_RATE);    
-    vTaskDelay(pdMS_TO_TICKS(10000));           // 10s delay to allow time to pullup serial monitor for debug.
+    vTaskDelay(pdMS_TO_TICKS(3000));           // delay to allow time to pullup serial monitor for debug.
+    buffer = (char *) malloc(sizeof(char) * 20 * 40);
     Serial.println("Entering Device Setup.");
     for(int i = 0; i < 5; i++) {
         Serial.println(".");
@@ -27,12 +30,19 @@ void setup() {
 } 
 
 void loop() {
+    //vTaskList(buffer);
+    //Serial.printf("----------------------------\n");
+    //Serial.printf(buffer);
+    //Serial.printf("\n----------------------------\n");
+    //sentry.showTaskMemoryUsage();
+    //delay(3000);
     //sentry.loop();
 }
 
-*/
+//*/
 
 
+/*
 #include <Arduino.h>
 #include <FirebaseClient.h>
 #include <WiFiClientSecure.h>
@@ -90,19 +100,59 @@ WiFiClientSecure ssl_client, stream_ssl_client1, stream_ssl_client2;
 using AsyncClient = AsyncClientClass;
 AsyncClient aClient(ssl_client), sentryLinkStreamClient(stream_ssl_client1);
 
-UserAuth user_auth(API_KEY, USER_EMAIL, USER_PASSWORD, 3000 /* expire period in seconds (<3600) */);
+UserAuth user_auth(API_KEY, USER_EMAIL, USER_PASSWORD, 3000);
 FirebaseApp app;
 RealtimeDatabase Database;
 AsyncResult streamResult1, streamResult2;
 
 unsigned long ms = 0;
 
+class Manager {
+    private:
+        WiFiClientSecure sslClient, sslStreamClient;
+        AsyncClient a_client, a_streamClient;
+        AsyncResult a_result, a_streamResult;
+        FirebaseApp app;
+        RealtimeDatabase database;
+        UserAuth auth;
+
+    public:
+        Manager() : 
+            sslClient(), a_result(), a_client(sslClient),
+            sslStreamClient(), a_streamResult(), a_streamClient(sslStreamClient),
+            app(), database(), auth(API_KEY, USER_EMAIL, USER_PASSWORD, 3000)
+        {}
+
+        AsyncClient *getAsyncClient() { return &a_client; }
+        AsyncResult *getAsyncResult() { return &a_result; }
+        AsyncClient *getStreamAsyncClient() { return &a_streamClient; }
+        AsyncResult *getStreamAsyncResult() { return &a_streamResult; }
+        WiFiClientSecure *getSSLClient() { return &sslClient; }
+        WiFiClientSecure *getStreamSSLClient() { return &sslStreamClient; }
+        FirebaseApp *getFirebaseApp() { return &app; }
+        RealtimeDatabase *getRTDB() { return &database; }
+        UserAuth *getUserAuth() {return &auth; }
+
+};
+
 class Rx {
     public:
-        Rx() {};
-        AsyncResultCallback processData(AsyncResult &aResult) {
+        AsyncClient *_aClient, *_aStreamClient;
+        AsyncResult *_aResult, *_aStreamResult;
+        Manager *cm;
+        
+        Rx(Manager m) {
+            cm = &m;
+            _aClient = m.getAsyncClient();
+            _aResult = m.getAsyncResult();
+            _aStreamClient = m.getStreamAsyncClient();
+            _aStreamResult = m.getStreamAsyncResult();
+        }
+        
+        void processData(AsyncResult &aResult) {
             // Exits when no result available when calling from the loop.
-            if (!aResult.isResult()) return NULL;
+            if (!aResult.isResult()) return;
+            Serial.println("We're past");
 
             if (aResult.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
 
@@ -144,12 +194,18 @@ class Rx {
                 }
                 Firebase.printf("Free Heap: %d\n", ESP.getFreeHeap());
             }
-
-            return NULL;
         }
+
+        void rx_user_data() {
+
+        }
+
+
 };
 
-Rx *receiver = new Rx();
+Manager cm;
+Rx *receiver = new Rx(cm);
+
 void setup()
 {
     Serial.begin(115200);
@@ -168,18 +224,30 @@ void setup()
 
     Firebase.printf("Firebase Client v%s\n", FIREBASE_CLIENT_VERSION);
 
-    ssl_client.setInsecure();
-    stream_ssl_client1.setInsecure();
+    cm.getSSLClient()->setInsecure();
+    cm.getStreamSSLClient()->setInsecure();
+
+    //ssl_client.setInsecure();
+    //stream_ssl_client1.setInsecure();
 
     Serial.println("Initializing app...");
-    initializeApp(aClient, app, getAuth(user_auth), auth_debug_print, "🔐 authTask");
+    initializeApp(
+        *cm.getAsyncClient(), 
+        *cm.getFirebaseApp(), 
+        getAuth(*cm.getUserAuth()), 
+        auth_debug_print, 
+        "🔐 authTask"
+    );
+
+    //initializeApp(aClient, app, getAuth(user_auth), auth_debug_print, "🔐 authTask");
 
     // Or intialize the app and wait.
-    // initializeApp(aClient, app, getAuth(user_auth), 120 * 1000, auth_debug_print);
+    //initializeApp(aClient, app, getAuth(user_auth), 120 * 1000, auth_debug_print);
 
-    app.getApp<RealtimeDatabase>(Database);
-
-    Database.url(DATABASE_URL);
+    //app.getApp<RealtimeDatabase>(Database);
+    //Database.url(DATABASE_URL);
+    cm.getFirebaseApp()->getApp<RealtimeDatabase>(*cm.getRTDB());
+    cm.getRTDB()->url(DATABASE_URL);
 
     // In SSE mode (HTTP Streaming) task, you can filter the Stream events by using AsyncClientClass::setSSEFilters(<keywords>),
     // which the <keywords> is the comma separated events.
@@ -191,21 +259,51 @@ void setup()
     // cancel - To allow the cancel event.
     // auth_revoked - To allow the auth_revoked event.
     // To clear all prevousely set filter to allow all Stream events, use AsyncClientClass::setSSEFilters().
-    sentryLinkStreamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
-    
+    //sentryLinkStreamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
+    cm.getStreamAsyncClient()->setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
+
 
     // The "unauthenticate" error can be occurred in this case because we don't wait
     // the app to be authenticated before connecting the stream.
     // This is ok as stream task will be reconnected automatically when the app is authenticated.
-    Database.get(sentryLinkStreamClient, SENTRYLINK_ROOT, receiver->processData(streamResult1), true /* SSE mode (HTTP Streaming) */, "sentryLinkStreamTask");
+    //Database.get(sentryLinkStreamClient, SENTRYLINK_ROOT, receiver->processData(streamResult1), true, "sentryLinkStreamTask");
 
     // Async call with AsyncResult for returning result.
-    //Database.get(sentryLinkStreamClient, SENTRYLINK_ROOT, streamResult1, true /* SSE mode (HTTP Streaming) */);
+    //Database.get(sentryLinkStreamClient, SENTRYLINK_ROOT, streamResult1, true);
+    cm.getRTDB()->get(
+        *cm.getStreamAsyncClient(), 
+        SENTRYLINK_ROOT, 
+        *cm.getStreamAsyncResult(), 
+        true
+    );
+    
+    ulong startTime = millis();
+    int timeoutMax = 5000;
+
+    while(cm.getFirebaseApp()->ready() == false && (millis() - startTime) < timeoutMax) {
+        Serial.println("Waiting to connect to Firebase.");
+        delay(1);
+    }
+
+    if((millis() - startTime) > timeoutMax) {
+        while(1) {
+            Serial.println("Connection failed. Try again.");
+            delay(1000);
+        }
+    }
+    
+    cm.getRTDB()->set<bool>(
+        *cm.getAsyncClient(),
+        "sentry/sentry_conn",
+        true
+    );
 
     createTasks();
 }
 
-void loop() {}
+void loop() {  
+   // app.loop(); 
+}
 
 void rx_dpad_task(void *pvParams) {
     // Setup.
@@ -234,13 +332,15 @@ void rx_user_config_task(void *pvParams) {
 void rx_process_data_task(void *pvParams) {
     // Setup.
     Rx *rcvr = static_cast<Rx *>(pvParams);
+    AsyncResult *res = (cm.getStreamAsyncResult());
+    FirebaseApp *f_app = (cm.getFirebaseApp());
 
     // Main task loop.
     for(;;) {
         // poll the receiver.
-        Serial.println("Polling Receiver for data!");
-        app.loop();
-        rcvr->processData(streamResult1);
+        //Serial.println("Polling Receiver for data!");
+        f_app->loop();
+        rcvr->processData(*res);
         vTaskDelay(pdMS_TO_TICKS(125));
     }
 }
@@ -302,3 +402,4 @@ void createTasks() {
     );
 }
 
+*/

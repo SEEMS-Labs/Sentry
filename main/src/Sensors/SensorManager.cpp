@@ -2,9 +2,29 @@
 #include <Arduino.h>
 
 // Define task handles.
+TaskHandle_t update_thresholds_handle = NULL;
 TaskHandle_t poll_US_handle = NULL;                
 TaskHandle_t poll_mic_handle = NULL;               
 TaskHandle_t poll_bme_handle = NULL;     
+
+/**
+ * This task updates the thresholds of all sensors based on custom thresholds provided
+ * by the user through firebase. 
+ */
+void update_thresholds_task(void *pvSensorManager) {
+    // Initialize task.
+    SensorManager *manager = static_cast<SensorManager *>(pvSensorManager);
+
+    // Task loop.
+    for(;;) {
+
+        // Block indefinitely until notifcation is received from the rx_user_data task.
+        // Time to wait for notification set as the maximum. Functionally means no seperate delay is needed.
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);   
+        Serial.println("Time to update sensor thresholds(maybe)");
+        manager->updateSensorThresholds();  
+    }
+}
 
 /**
  * This task reads and provides the distance values measured from the ultrasonic sensors.
@@ -27,7 +47,7 @@ void poll_US_task(void *pvSensorManager) {
     HCSR04 *rightSensor = manager->fetchUS(R_US_ID);
 
     // Grab data packets.
-    Obstacles *obsDetectionPacket = manager->getObstaclesPacket();
+    ObstacleData *obsDetectionPacket = manager->getObstaclesPacket();
     Alerts *alertInfoPacket = manager->getAlertsPacket();
 
     // For testing purposes.
@@ -94,7 +114,6 @@ void poll_mic_task(void *pvSensorManager) {
 
     // Main task loop.
     for(;;) {
-        //Serial.println("Begin reading mic.");
 
         bool success = mic->readSensor(-1);
         if(success) {
@@ -149,13 +168,13 @@ void poll_bme_task(void *pvSensorManager) {
     for(;;) {
 
         // Read BME.
-        Serial.printf("\n--Begin polling BME.\n");
+        //Serial.printf("\n--Begin polling BME.\n");
         bool success = bme->readSensor(BME_READ_TIME);
-        Serial.printf("--Done polling BME.\n");
+        //Serial.printf("--Done polling BME.\n");
 
         // Grab readings if succesful.
         if(success) {
-            Serial.println("--Reading was successful.");
+            //Serial.println("--Reading was successful.");
 
             // Check to see if alerts ready.
             char thresholdCheck = bme->passedThreshold();
@@ -202,7 +221,7 @@ void poll_bme_task(void *pvSensorManager) {
             */
 
             // Notify general data transmission task.
-            Serial.printf("--Notifying TX_SENSOR_DATA_TASK\n");
+            //Serial.printf("--Notifying TX_BME_DATA_TASK\n");
             if(!SERIAL_ONLY_MODE) xTaskNotify(tx_bme_data_handle, BME_DATA_READY, eNoAction);
         }
         else Serial.printf("--Reading was unsuccessful. You're cooked. BME Active: %d\n", bme->checkSensorStatus());
@@ -278,24 +297,36 @@ void SensorManager::initAllSensors(){
  * Initialze the Sentry's 4 Ultrasonic Sensors.
  */
 void SensorManager::initUS() {
-    frontUS.init();
-    leftUS.init();
-    rightUS.init();
-    backUS.init();
+    frontUS = new HCSR04(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM, this);
+    backUS = new HCSR04(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM, this);
+    leftUS = new HCSR04(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM, this);
+    rightUS = new HCSR04(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM, this);
+
+    frontUS->init();
+    leftUS->init();
+    rightUS->init();
+    backUS->init();
+
+    frontUS->setThreshold(preferences);
+    leftUS->setThreshold(preferences);
+    rightUS->setThreshold(preferences);
+    backUS->setThreshold(preferences);
 }
 
 /**
  * Initialize the Sentry's Microphone.
  */
 void SensorManager::initMic() {
-    mic.init();
+    mic->init();
+    mic->setThreshold(preferences);
 }
 
 /**
- * Initialize the Sentry's evironmental sensor.
+ * Initialize the Sentry's environmental sensor.
  */
 void SensorManager::initBME() {
-    bme688.init();  
+   bme688->init();  
+   bme688->setThresholds(preferences);
 }
 
 void SensorManager::attachAllInterrupts(){
@@ -308,18 +339,34 @@ void SensorManager::attachAllInterrupts(){
 
 // Per name.
 void SensorManager::beginAllTasks() {
-    // Create and begin all sensorbased tasks.
-    beginReadUltrasonicTask();
-    beginReadMicrophoneTask();
-    beginReadBMETask();
+
+    // Create and begin all sensor based tasks.
+    BaseType_t taskCreated;
+
+    taskCreated = beginReadUltrasonicTask();
+    if(taskCreated != pdPASS) Serial.printf("Read Ultrasonic Sensor task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Read Ultrasonic Sensor task created.");
+
+    taskCreated = beginReadMicrophoneTask();
+    if(taskCreated != pdPASS) Serial.printf("Read Microphone task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Read Microphone task created.");
+
+    taskCreated = beginReadBMETask();
+    if(taskCreated != pdPASS) Serial.printf("Read BME task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Read BME task created.");
+
+    taskCreated = beginUpdateThresholdTask();
+    if(taskCreated != pdPASS) Serial.printf("Update Sensor Thresholds task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Update Sensor Thresholds task created.");
+    
 }
 
 HCSR04* SensorManager::fetchUS(SensorID id) {
     switch (id) {
-        case F_US_ID: return &frontUS;
-        case B_US_ID: return &backUS;
-        case L_US_ID: return &leftUS;
-        case R_US_ID: return &rightUS;
+        case F_US_ID: return frontUS;
+        case B_US_ID: return backUS;
+        case L_US_ID: return leftUS;
+        case R_US_ID: return rightUS;
     }
 
     // Return.
@@ -327,60 +374,102 @@ HCSR04* SensorManager::fetchUS(SensorID id) {
 }
 
 BME688* SensorManager::fetchBME() {
-    return &bme688;
+    return bme688;
 }
 
 Microphone* SensorManager::fetchMic() {
-    return &mic;
+    return mic;
 }
 
 Alerts* SensorManager::getAlertsPacket() {
     return alertInfo;
 }
 
-Obstacles* SensorManager::getObstaclesPacket() {
-    return &obstacleInfo;
+ObstacleData* SensorManager::getObstaclesPacket() {
+    return obstacleInfo;
 }
 
 SensorData* SensorManager::getEnvironmentalDataPacket() {
     return environmentalData;
 }
 
+UserSentryConfig *SensorManager::getUserSentryConfigDataPacket() {
+    return userConfig;
+}
+
+void SensorManager::updateSensorThresholds() {
+    frontUS->setThreshold(preferences);
+    backUS->setThreshold(preferences);
+    leftUS->setThreshold(preferences);
+    rightUS->setThreshold(preferences);
+    mic->setThreshold(preferences);
+    bme688->setThresholds(preferences);
+}
+
 // Create the task to poll the 4 ultrasonic sensors.
-void SensorManager::beginReadUltrasonicTask() {
-    xTaskCreatePinnedToCore(
-        &poll_US_task,          // Pointer to task function.
-        "poll_US_Task",         // Task name.
-        TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
-        this,                   // Pointer to parameters used for task creation.
-        MAX_PRIORITY,           // Task priority level.
-        &poll_US_handle,        // Pointer to task handle.
-        1                       // Core that the task will run on.
+BaseType_t SensorManager::beginReadUltrasonicTask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &poll_US_task,                  // Pointer to task function.
+        "poll_US_Task",                 // Task name.
+        TaskStackDepth::tsd_POLL,       // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_HIGH,    // Task priority level.
+        &poll_US_handle,                // Pointer to task handle.
+        1                               // Core that the task will run on.
     );
+    return res;
 }
 
 // Create the task to poll the Microphone.
-void SensorManager::beginReadMicrophoneTask() {
-    xTaskCreatePinnedToCore(
+BaseType_t SensorManager::beginReadMicrophoneTask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
         &poll_mic_task, 
-        "poll_mic_Name", 
-        TASK_STACK_DEPTH, 
+        "poll_mic_Task", 
+        TaskStackDepth::tsd_POLL, 
         this, 
-        MAX_PRIORITY, 
+        TaskPriorityLevel::tpl_MEDIUM, 
         &poll_mic_handle, 
         1
-    );  
+    ); 
+    return res; 
 }
 
-// Create the task to poll the BME688.
-void SensorManager::beginReadBMETask() {
-    xTaskCreatePinnedToCore(
-        &poll_bme_task,         // Pointer to task function.
-        "poll_bme_Name",        // Task name.
-        TASK_STACK_DEPTH,       // Size of stack allocated to the task (in bytes).
-        this,                   // Pointer to parameters used for task creation.
-        MEDIUM_PRIORITY,           // Task priority level.
-        &poll_bme_handle,       // Pointer to task handle.
-        1                       // Core that the task will run on.
+// Create the task to poll thebme688->
+BaseType_t SensorManager::beginReadBMETask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &poll_bme_task,                 // Pointer to task function.
+        "poll_bme_Task",                // Task name.
+        TaskStackDepth::tsd_POLL,       // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_MEDIUM,  // Task priority level.
+        &poll_bme_handle,               // Pointer to task handle.
+        1                               // Core that the task will run on.
     );
+    return res;
+}
+
+// Create the task to update sensor thresholds.
+BaseType_t SensorManager::beginUpdateThresholdTask() {
+    BaseType_t res;
+    res = xTaskCreatePinnedToCore(
+        &update_thresholds_task,            // Pointer to task function.
+        "update_sensor_thresholds_task",    // Task name.
+        TaskStackDepth::tsd_SET,            // Size of stack allocated to the task (in bytes).
+        this,                               // Pointer to parameters used for task creation.
+        TaskPriorityLevel::tpl_MEDIUM_LOW,  // Task priority level.
+        &update_thresholds_handle,          // Pointer to task handle.
+        1                                   // Core that the task will run on.
+    );
+    return res;
+}
+void SensorManager::constructAllSensors() {
+    frontUS = new HCSR04(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM, this);
+    backUS = new HCSR04(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM, this);
+    leftUS = new HCSR04(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM, this);
+    rightUS = new HCSR04(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM, this);
+    bme688 = new BME688(BME_SDI, BME_SCK, this);
+    mic = new Microphone(MIC_ANALOG_OUT, this);
 }

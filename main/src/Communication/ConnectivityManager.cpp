@@ -12,7 +12,7 @@ SemaphoreHandle_t firebase_app_mutex = NULL;
 bool ConnectivityManager::checkForCredentials() {
     Serial.println("Checking if Credentials Exist.");
 
-    // Overide normal process if testing w/ static wi-fi creds.
+    // Override normal process if testing w/ static wi-fi creds.
     bool credsExist = false;
     if(EE2_TEST_MODE && (ssid != DEFAULT_SSID) && (password != DEFAULT_PASS)) {
         return true;    // True = good credentials. Only override if your credentials are guaranteed.
@@ -367,22 +367,23 @@ void ConnectivityManager::initFirebase() {
     // Attempt to connect to Firebase with a timeout.
     Serial.println("Check for succesful Sentry Connection to Firebase.");
     ulong startTime = millis();
-    while (!_fbApp.ready() && (millis() - startTime) < 3000) {
-        Serial.println("Waiting for Firebase to be ready...");
+    int timeoutMax = 10000;
+    while (!_fbApp.ready() && (millis() - startTime) < timeoutMax) {
+        //Serial.println("Waiting for Firebase to be ready...");
         _fbApp.loop();
         delay(1); // Give Firebase more time to stabilize.
     }
     ulong endTime = millis();
 
     // Show the connection status and timed value.
-    if((endTime - startTime) < 5000 && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
+    if((endTime - startTime) < timeoutMax && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
     else Serial.println("Connection to Firebase timed out.");
     
     // Deal with non connection state.
     if(_fbApp.ready() == false) {
         Serial.println("Unsuccesful connection. Timeout reached....");
         while(true) {
-            Serial.println("Press Reset Button an Try again Until a better solution is found out.");
+            Serial.println("Press Reset Button and Try again Until a better solution is found out.");
             delay(1000);
         }
     }
@@ -547,6 +548,8 @@ FirebaseApp *ConnectivityManager::getFbApp() { return &_fbApp; }
 /**
  * Return pointer to the stream result that holds information transmitted by the Sentry.
  */
-AsyncResult *ConnectivityManager::getSentryLinkStreamResult() {
-    return &streamResult;
+AsyncResult ConnectivityManager::getSentryLinkStreamResult() {
+    return streamResult;
 }
+
+Receiver *ConnectivityManager::getReceiver() { return _receiver; }

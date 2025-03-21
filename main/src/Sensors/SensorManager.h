@@ -2,11 +2,22 @@
 #ifndef SENSOR_MANAGER_H
 #define SENSOR_MANAGER_H
 
-// Grab Sentry related headers.
+// Grab required headers.
 #include "Sentry/main/src/sentryConfigInfo.h"
+#pragma once
 #include "HCSR04/HCSR04.h"
-#include "Microphone/mic.h"
+
+#pragma once
+#include "Microphone/Microphone.h"
+
+#pragma once
 #include "BME688/BME688.h"
+#include <Preferences.h>
+
+// Forward definition of Sensors.
+class HCSR04;
+class Microphone;
+class BME688;
 
 // Some quality of life type definitions.
 typedef int SensorID;               // Sensor Id.
@@ -32,9 +43,10 @@ typedef uint32_t milliSeconds;      // Milliseconds.
 #define BME_READ_TIME ((milliSeconds) pdMS_TO_TICKS(TTR_BME))       // The maximum time it takes to read the BME688 (in ticks).
 #define MAX_BME_POLL_TIME 6000                                      // The delay between each new polling of the BME688.
 
-void poll_US_task(void *pvSensorManager);   // Polling ultrasonic sensor task.
-void poll_mic_task(void *pvSensorManager);     // Polling microphone task.
-void poll_bme_task(void *pvSensorManager);  // Polling BME688 task.
+void update_thresholds_task(void *pvSensorManager); // Updating sensor thresholds task.
+void poll_US_task(void *pvSensorManager);           // Polling ultrasonic sensor task.
+void poll_mic_task(void *pvSensorManager);          // Polling microphone task.
+void poll_bme_task(void *pvSensorManager);          // Polling BME688 task.
 
 void IRAM_ATTR on_front_us_echo_changed(void *arg);  // ISR that deals with timing of front ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
 void IRAM_ATTR on_back_us_echo_changed(void *arg);   // ISR that deals with timing of back ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
@@ -48,39 +60,46 @@ class SensorManager {
 
     //*****************************  General Management  *********************************/
     private:
-        Alerts *alertInfo;               // Packet of important Sentry alert info for SentryLink.
-        Obstacles obstacleInfo;         // Packet of obstacle detection data for navigation.
-        SensorData *environmentalData;   // Packet of important environmental sensor readings for SentryLink.
+        Alerts *alertInfo;                  // Pointer to Packet of important Sentry alert info for SentryLink.
+        ObstacleData *obstacleInfo;         // Pointer to Packet of obstacle detection data for navigation.
+        UserSentryConfig *userConfig;       // Pointer to Packet of sensor threshold information for updates.
+        SensorData *environmentalData;      // Pointer to Packet of important environmental sensor readings for SentryLink.
+        StateManager *stateManager;         // Pointer to the Sentry's State Manager.
+        Preferences preferences;            // Access to the Sentry's Permanent Memory.
+        void constructAllSensors();
 
     public:
         /**
          * Create the main Sensor Manager.
          */
-        SensorManager(SensorData *envData, Alerts *envStatus) : 
-            frontUS(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM),
-            backUS(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM), 
-            leftUS(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM), 
-            rightUS(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM),
-            bme688(BME_SDI, BME_SCK),
-            mic(MIC_ANALOG_OUT),
+        SensorManager(SensorData *envData, Alerts *envStatus, UserSentryConfig *userConfig, ObstacleData *obstacleInfo) : 
+            stateManager(StateManager::getManager()),
             alertInfo(envStatus),
-            environmentalData(envData)  {};
+            environmentalData(envData),
+            userConfig(userConfig),
+            obstacleInfo(obstacleInfo)
+        {
+            constructAllSensors();
+        };
 
         void initAllSensors();          // Initialize all 6 sensors of the Sentry.
         void attachAllInterrupts();     // Attach all sensor based interrupts of the Sentry.
         void beginAllTasks();           // Begin all sensor based tasks of the Sentry.
         Alerts *getAlertsPacket();
-        Obstacles *getObstaclesPacket();
+        ObstacleData *getObstaclesPacket();
         SensorData *getEnvironmentalDataPacket();
+        UserSentryConfig *getUserSentryConfigDataPacket(); 
+        void updateSensorThresholds();
+        BaseType_t beginUpdateThresholdTask();
 
     //************************************************************************************/
     
     //*****************************  Ultrasonic Sensors  *********************************/
     private:
-        HCSR04 frontUS;     // Front-facing ultrasonic sensor of the Sentry.
-        HCSR04 backUS;      // Rear-facing ultrasonic sensor of the Sentry.
-        HCSR04 leftUS;      // Left-facing ultrasonic sensor of the Sentry.
-        HCSR04 rightUS;     // Right-facing ultrasonic sensor of the Sentry.
+        HCSR04 *frontUS;     // Front-facing ultrasonic sensor of the Sentry.
+        HCSR04 *backUS;      // Rear-facing ultrasonic sensor of the Sentry.
+        HCSR04 *leftUS;      // Left-facing ultrasonic sensor of the Sentry.
+        HCSR04 *rightUS;     // Right-facing ultrasonic sensor of the Sentry.
 
         float isrPulseDuration = -1;      // Stores the duration of the pulse captured by ISR.
         unsigned long isrPulseStart = -1; // Stores the time at which the sensor's echo has begun from ISR.
@@ -88,28 +107,28 @@ class SensorManager {
 
     public:
         void initUS();
-        void beginReadUltrasonicTask();
+        BaseType_t beginReadUltrasonicTask();
         HCSR04 *fetchUS(SensorID id);
     //************************************************************************************/
 
     //*****************************  Noise Sensor/ Mic  **********************************/
     private:
-        Microphone mic;     // Noise sensor of the Sentry.
+        Microphone *mic;     // Noise sensor of the Sentry.
     
     public:
         void initMic();
-        void beginReadMicrophoneTask();
+        BaseType_t beginReadMicrophoneTask();
         Microphone *fetchMic();
         
     //************************************************************************************/
 
     //***********************************  BME688  ***************************************/
     private:
-        BME688 bme688;      // Environmental sensor of the Sentry.
+        BME688 *bme688;      // Environmental sensor of the Sentry.
 
     public:
         void initBME();
-        void beginReadBMETask();
+        BaseType_t beginReadBMETask();
         BME688 *fetchBME();
     //************************************************************************************/
 

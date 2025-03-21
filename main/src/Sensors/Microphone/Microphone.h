@@ -3,7 +3,15 @@
 #define MIC_H
 
 #include "SensorInterface.h"
+#include "Sentry/main/src/sentryConfigInfo.h"
+#include "Sentry/main/src/StateManager.h"
+#pragma once
+#include "Sentry/main/src/Sensors/SensorManager.h"
 #include <Arduino.h>
+#include <Preferences.h>
+
+// Forward definition of SensorManager.
+class SensorManager;
 
 class Microphone : public SensorInterface {
 
@@ -17,7 +25,7 @@ class Microphone : public SensorInterface {
         /**
          * The noise threshold for this microphone.
          */
-        float noiseThreshold;
+        float noiseThreshold = DEF_NOISE_LIM;
 
         /**
          * Sampling Rate to be used in taking readings.
@@ -40,14 +48,19 @@ class Microphone : public SensorInterface {
         float noiseBuffer[bufferSize];
 
         bool active = false;
+        SensorManager *sensorManager;
+        void setThresholdFromPreferences(Preferences preferences);
+        void setThresholdAndUpdatePreferences(Preferences preferences);
 
     public:
         /**
          * Defines the sensors pins and connects them to the ESP32, and sets the noise threshold.
          * @param output The analog output pin of this microphone.
-         * @param noisethreshold The noise threshold of this microphone.
+         * @param sensorManager The manager that oversees this microphone.
          */
-        Microphone(int output) : output(output) {};
+        Microphone(int output, SensorManager *sensorManager) : 
+            output(output),
+            sensorManager(sensorManager) {};
 
         /**
          * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
@@ -70,6 +83,12 @@ class Microphone : public SensorInterface {
         void disable() override;
 
         /**
+         * Set this microphone's dbSPL threshold.
+         * @param preferences Access to Sentry NVM (permanent memory).
+         */
+        void setThreshold(Preferences preferences);
+
+        /**
          * Signal that a sensor has passed its threshold(s) so that action can be taken.
          * @return True if the sensor has passed its threshold, false othewise.
          */
@@ -83,9 +102,10 @@ class Microphone : public SensorInterface {
 
         float rmsBuffer();
         float getLastSoundLevelReading();
+        float getThreshold();
         
 
 };
 
 // End include guard.
-#endif /*mic.h*/
+#endif /*Microphone.h*/
