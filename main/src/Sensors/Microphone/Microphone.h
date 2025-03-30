@@ -95,8 +95,8 @@ class Microphone : public SensorInterface {
         char passedThreshold() override;
 
         /**
-         * Take the avarage of a buffer that holds past sensor data.
-         * @return The average value of a buffer which stores recent past sensor data.
+         * Signal that a sensor has passed its threshold(s) so that action can be taken.
+         * @return A byte reading 0xFF if the sensor has passed its threshold, 0x00 othewise.
          */
         float averageBuffer() override;
 

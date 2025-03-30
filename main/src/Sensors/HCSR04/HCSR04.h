@@ -65,8 +65,8 @@ class HCSR04 : public SensorInterface {
          */
         float pastDistances[bufferSize];
 
-        unsigned long isrPulseStart = -1; // Stores the time at which the sensor's echo has begun from ISR.
-        unsigned long isrPulseEnd = -1;   // Stores the time at which the sensor's echo has finished from ISR.    
+        unsigned long isrPulseStart = 0; // Stores the time at which the sensor's echo has begun from ISR.
+        unsigned long isrPulseEnd = 0;   // Stores the time at which the sensor's echo has finished from ISR.    
 
         /**
          * Pulse this ultrasonic sensor's trigger pin to initiate a measurement.
@@ -79,8 +79,8 @@ class HCSR04 : public SensorInterface {
         float computeInches();
 
         SensorManager *sensorManager;
-        void setThresholdFromPreferences(Preferences preferences);
-        void setThresholdAndUpdatePreferences(Preferences preferences);
+        void setHpeThresholdFromPreferences(Preferences preferences);
+        void setHpeThresholdAndUpdatePreferences(Preferences preferences);
 
     public:
         /**
@@ -120,15 +120,20 @@ class HCSR04 : public SensorInterface {
         void disable() override;
 
         /**
+         * Retrieve this sensors Human presence estimation threshold.
+         */
+        float getHpeThreshold();
+
+        /**
          * Set this ultrasonic sensors human presence estimation threshold.
          * @param preferences Access to Sentry NVM (permanent memory).
          */
-        void setThreshold(Preferences preferences);
+        void setHpeThreshold(Preferences preferences);
 
         /**
          * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.
-         * @return A byte where the Bit 7 (MSB) represents ths obstacle detection threshold 
-         * and Bit 6 representes the presence detection threshold. A bit set to 1 indicates 
+         * @return A byte where the Bit 0 (LSB) represents ths obstacle detection threshold 
+         * and Bit 1 represents the presence detection threshold. A bit set to 1 indicates 
          * the distance threshold has been breached and a bit set to 0 indicates the opposite.
          */
         char passedThreshold() override;

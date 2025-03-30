@@ -7,6 +7,8 @@
 
 #define EE2_TEST_MODE 1     // To override certain function flows for testing purposes.
 #define SERIAL_ONLY_MODE 0  // Mode to deal with things only via the serial terminal and no wi-fi.
+#define MVMT_ACTIVE 0       // Mode to deal with movement being used.
+#define USE_HPE_DEF_THD 1   // Mode to use default hpe threshold in code, not on esp32 memory.
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
@@ -66,7 +68,7 @@
 #define R_MOT_PWM1  40      // Right Motor Driver Direction Input Pin.
 #define R_MOT_PWM2  41      // Right Motor Driver PWM Input Pin.
 #define R_MOT_DIAG  42      // Right Motor Driver Fault Output Pin.
-#define R_MOT_OCM   38      // Right Motor Driver Current Sense Output Pin.
+#define R_MOT_OCM   10      // Right Motor Driver Current Sense Output Pin.
 
 /*********************************************************
                 ALERT THRESHOLDS
@@ -76,7 +78,7 @@
 #define DEF_TEMP_LIM 100    // Default Temperature Level Trheshold (in degrees C).
 #define DEF_HUM_LIM 90      // Default Humidity Level Threshold (in relative humidity %).
 #define DEF_PRES_LIM 1200   // Default Pressure Level Threshold (in hPa).
-#define DEF_HP_EST_LIM 150  // Default Human Presence Estimation Threshold (in inches).
+#define DEF_HP_EST_LIM 36  // Default Human Presence Estimation Threshold (in inches).
 //#define DEF_CO2_LIM 2500    // Default CO2 Level Threshold (in ppm).
 //#define DEF_VOC_LIM 20      // Default bVOC Level Threshold (in ppm).
 
@@ -99,8 +101,15 @@
 #define MIN_PRES 300    
 
 /*********************************************************
+                MOTOR DEFAULTS
+**********************************************************/
+#define DEFAULT_SPEED 200
+
+/*********************************************************
             COMMUNICATION CONFIGURATION
 **********************************************************/
+#define FB_CONN_TIMEOUT_PERIOD 15000 
+
 #define FB_SENTRY_CONN      ((String) "sentry/sentry_conn")
 #define FB_ENV_DATA_ADDRESS ((String) "sentry/readings/")
 #define FB_ALERTS_ADDRESS   ((String) "sentry/alerts/")
@@ -125,10 +134,12 @@
 #define VOC_DATA_KEY "bvoc"
 #define CO2_DATA_KEY "co2"
 
-typedef float SensorReading;   // Represents sensor values. Data should never require more than 16-bits.
-typedef bool Status;           // Represents alert status as a boolean.
-const Status UNSAFE = false;
-const Status SAFE = true;
+#define THD_ALERT 0xFF          // Defualt return value of threshold checking methods.
+
+typedef float SensorReading;    // Represents sensor values. Data should never require more than 16-bits.
+typedef bool Status;            // Represents alert status as a boolean.
+const Status UNSAFE = true;     // This means that an alert has been triggered on a specific parameter. 
+const Status SAFE = false;      // This means that an alert has not been triggered on a specific parameter.
 
 // Data packet that holds sentry sensor data to be transmitted.
 typedef struct _sensorData SensorData;
@@ -302,6 +313,9 @@ extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user c
 
 extern TaskHandle_t user_ctrld_mvmt_handle;     // Task handle to control motors via user direction.
 extern TaskHandle_t erw_mvmt_handle;            // Task handle to control motors via Enhanced Random Walk algo.
+extern TaskHandle_t monitor_ocm_handle;         // Task handle to read the current monitoring pins of the drive system.
+extern TaskHandle_t monitor_diag_handle;        // Task handle to read the diagnostic pins of the drive system.
+
 
 // Size of the stack allocated on the heap to a task (in bytes).
 enum TaskStackDepth {
@@ -359,7 +373,6 @@ enum class _movement_states {
     ms_IDLE,
     ms_MANUAL,
     ms_AUTONOMOUS,
-    ms_HOMING,
     ms_EMERGENCY_STOP
 };
 

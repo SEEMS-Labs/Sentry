@@ -34,18 +34,25 @@ class Transmitter {
         StateManager *_stateManager;        // Sentry State manager.
         ConnectivityManager *_connManager;  // Sentry connectivty manager.
 
-        JsonWriter jsonWriter;
-        object_t bmeTxBuffer[8];
-        object_t alertTxBuffer[7];
-        float micTxBuffer;
+        JsonWriter jsonWriter;      // Json String Writer for transmission packets.
+        object_t bmeTxBuffer[8];    // Transmission Buffer for BME data transmission.
+        object_t alertTxBuffer[7];  // Transmission Buffer for alert transmission.
+        float micTxBuffer;          // Transmission Buffer for BME data transmission.
 
-        // Per name.
-        void buildBmeDataTransmission();  
+        /**
+         * Build and construct the BME environmental data packet for transmission.
+         */
+        void buildBmeDataTransmission();   
 
+        /**
+         * Build and construct the mic data packet for transmission.
+         */
         void buildMicDataTransmisison();
 
-        // Per name.
-        object_t buildAlertsTransmission();  
+        /**
+         * Build and construct the alerts data packet for transmission.
+         */
+        void buildAlertsTransmission();  
         
         /**
          * Update the appropriate fields in firebase as decided by the parameters passed.

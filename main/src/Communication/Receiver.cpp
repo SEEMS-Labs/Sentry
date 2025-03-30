@@ -13,7 +13,6 @@ void rx_user_data_task(void *pvReceiver) {
 
     // Task loop.
     for(;;) {
-
         _rcvr->receiveSentryLinkUserData();
         vTaskDelay(pdMS_TO_TICKS(125));
     }
@@ -128,7 +127,7 @@ void Receiver::initTasks() {
 
     taskCreated = beginUserDataRxTask();
     if(taskCreated != pdPASS) Serial.printf("Receive User Data task not created. Fail Code: %d\n", taskCreated);
-    else Serial.println("Recieve User Data task created.");
+    else Serial.println("Receive User Data task created.");
 
 }
 

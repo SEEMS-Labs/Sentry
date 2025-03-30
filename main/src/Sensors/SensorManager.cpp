@@ -5,7 +5,7 @@
 TaskHandle_t update_thresholds_handle = NULL;
 TaskHandle_t poll_US_handle = NULL;                
 TaskHandle_t poll_mic_handle = NULL;               
-TaskHandle_t poll_bme_handle = NULL;     
+TaskHandle_t poll_bme_handle = NULL;    
 
 /**
  * This task updates the thresholds of all sensors based on custom thresholds provided
@@ -50,48 +50,93 @@ void poll_US_task(void *pvSensorManager) {
     ObstacleData *obsDetectionPacket = manager->getObstaclesPacket();
     Alerts *alertInfoPacket = manager->getAlertsPacket();
 
-    // For testing purposes.
-    float readings[4];
+    // Create reading success monitoring variables.
+    bool frontGood, backGood, leftGood, rightGood;
+
+    // Create threshold monitoring variables
+    char frontBreached, backBreached, leftBreached, rightBreached;
+    bool breachDetected;
     
     // Begin task loop.
     for(;;) {
-        Serial.println("Begin Reading Ultrasonic Sensors.");
+        //Serial.println("Begin Reading Ultrasonic Sensors");
         
         // Read all 4 sensors on the specified order. At most ~40 ms to read 1 -> ~160ms to read all 4.
-        frontSensor->readSensor(US_READ_TIME);
-        readings[F_US_ID] = frontSensor->getDistanceReading();
-        backSensor->readSensor(US_READ_TIME);
-        readings[B_US_ID] = backSensor->getDistanceReading();
-        leftSensor->readSensor(US_READ_TIME);
-        readings[L_US_ID] = leftSensor->getDistanceReading();
-        rightSensor->readSensor(US_READ_TIME);
-        readings[R_US_ID] = rightSensor->getDistanceReading();
-        
-        // Check to see if Thresholds were passed.
-        Status frontBreached = frontSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
-        Status backBreached = backSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
-        Status leftBreached = leftSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
-        Status rightBreached = rightSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+        frontGood = frontSensor->readSensor(US_READ_TIME);
+        backGood = backSensor->readSensor(US_READ_TIME);
+        leftGood = leftSensor->readSensor(US_READ_TIME);
+        rightGood = rightSensor->readSensor(US_READ_TIME);
 
-        // Notify transmitter for testing firebase transmission.
-        
-        // Notify the appropriate tasks if an obstacles have been detected.
-        if(frontBreached || backBreached || leftBreached || rightBreached) {
-            // Update Obstacle Detection data packet.
-            obsDetectionPacket->frontObstacleDetected = frontSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
-            obsDetectionPacket->backObstacleDetected = backSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
-            obsDetectionPacket->leftObstacleDetected = leftSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
-            obsDetectionPacket->rightObstacleDetected = rightSensor->passedThreshold() & OBSTACLE_THRESHOLD_BREACHED;
+        //Serial.printf("FrontGood: %d, BackGood: %d, LeftGood: %d, RightGood: %d\n", frontGood, backGood, leftGood, rightGood);
 
-            // Notify tasks.
-            //xTaskNotify(move_sentry_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+        /*
+        if(frontSensor->isActive()) Serial.printf("Front: %.2f in.\n", frontSensor->getDistanceReading());
+        if(backSensor->isActive()) Serial.printf("Back: %.2f in.\n", frontSensor->getDistanceReading());
+        if(leftSensor->isActive()) Serial.printf("Left: %.2f in.\n", frontSensor->getDistanceReading());
+        if(rightSensor->isActive()) Serial.printf("Right: %.2f in.\n", frontSensor->getDistanceReading());
+        */
+
+        // Get thresholds breached for each sensor.
+        frontBreached = frontSensor->passedThreshold();
+        backBreached = backSensor->passedThreshold();
+        leftBreached = leftSensor->passedThreshold();
+        rightBreached = rightSensor->passedThreshold();
+        
+        // Determine threshold breaches to act on based on movement mode.
+        MovementState currMvmtState = StateManager::getManager()->getSentryMovementState();
+        
+        // Deal with Sentinel Mode (aka Idle movement mode). Ultrasonics used for human presence estimation.
+        if(currMvmtState == MovementState::ms_IDLE) {
+            // Get human presence threshold breached flag for each sensor.
+            frontBreached &= PRESENCE_THRESHOLD_BREACHED;
+            backBreached &= PRESENCE_THRESHOLD_BREACHED;
+            leftBreached &= PRESENCE_THRESHOLD_BREACHED;
+            rightBreached &= PRESENCE_THRESHOLD_BREACHED;
+
+            // Update alerts packet if needed.
+            breachDetected = frontBreached || backBreached || leftBreached || rightBreached;
+            alertInfoPacket->motion = (breachDetected) ? UNSAFE : SAFE;
+
+            // Notify alert transmission task. 
+            if(breachDetected) {
+                Serial.println("✨Presence Detected, Finna Transmit.");
+                if(frontBreached) Serial.printf("Front: %.2f in. < %.2f in.\n", frontSensor->getDistanceReading(), frontSensor->getHpeThreshold());
+                if(backBreached) Serial.printf("Back: %.2f in. < %.2f in.\n", backSensor->getDistanceReading(), backSensor->getHpeThreshold());
+                if(leftBreached) Serial.printf("Left: %.2f in. < %.2f in.\n", leftSensor->getDistanceReading(), leftSensor->getHpeThreshold());
+                if(rightBreached) Serial.printf("Right: %.2f in. < %.2f in.\n", rightSensor->getDistanceReading(), rightSensor->getHpeThreshold());
+                xTaskNotify(tx_alerts_handle, PRESENCE_THRESHOLD_BREACHED, eSetBits);
+            }
         }
 
-        Serial.printf("Front(%d): %.2f in.\n", manager->fetchUS(F_US_ID)->isActive(), readings[F_US_ID]);
-        //Serial.printf("Back(%d): %.2f in.\n", manager->fetchUS(B_US_ID)->isActive(), readings[B_US_ID]);
-        //Serial.printf("Left(%d): %.2f in.\n", manager->fetchUS(L_US_ID)->isActive(), readings[L_US_ID]);
-        //Serial.printf("Right(%d): %.2f in.\n", manager->fetchUS(R_US_ID)->isActive(), readings[R_US_ID]);
-        //Serial.println("Done Reading Sensors.");
+        // Deal with Sentry Modes (AKA Autonomous and Manual movement modes). Ultrasonics used for obstacle estimation.
+        else if(currMvmtState != MovementState::ms_EMERGENCY_STOP) {
+            // Get obstacle detection breached flag for each sensor.
+            frontBreached &= OBSTACLE_THRESHOLD_BREACHED;
+            backBreached &= OBSTACLE_THRESHOLD_BREACHED;
+            leftBreached &= OBSTACLE_THRESHOLD_BREACHED;
+            rightBreached &= OBSTACLE_THRESHOLD_BREACHED;            
+
+            // Update Obstacle Detection data packet if needed.
+            breachDetected = frontBreached || backBreached || leftBreached || rightBreached;
+            obsDetectionPacket->frontObstacleDetected = frontBreached;
+            obsDetectionPacket->backObstacleDetected = backBreached;
+            obsDetectionPacket->leftObstacleDetected = leftBreached;
+            obsDetectionPacket->rightObstacleDetected = rightBreached;
+
+            // Notify tasks.
+            if(breachDetected) {
+                // Notify random walk task.
+                if(currMvmtState == MovementState::ms_AUTONOMOUS) xTaskNotify(erw_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+
+                // Notify user controlled movement task.
+                else if(currMvmtState == MovementState::ms_MANUAL) xTaskNotify(user_ctrld_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+            }
+        }
+
+        // This case shouldn't be reached.
+        else {
+            Serial.println("Hmm. How did we get here?");
+        }
 
         // Poll sensors periodically.
         vTaskDelayUntil(&xLastWakeTime, MAX_US_POLL_TIME + 250);
@@ -127,15 +172,16 @@ void poll_mic_task(void *pvSensorManager) {
                 //Serial.printf("Data Value: %f\n", soundLevel);
 
                 // Check to see if alerts ready.
-                /*
+                //*
                 char thresholdCheck = mic->passedThreshold();
-                if(thresholdCheck == 0xFF) {
+                if(thresholdCheck == THD_ALERT) {
                     // Update alerts packet.
                     alertInfoPacket->noiseStatus = UNSAFE;
                 
                     // Notify alert transmission task.
                     xTaskNotify(tx_alerts_handle, -1, eNoAction);
-                } */
+                } 
+                //*/
 
                 // Update data buffer. Notify transmit task.
                 //Serial.printf("DATA PACKET PRE UPDATE: %f\n", sensorDataPacket->noiseLevel);
@@ -178,14 +224,14 @@ void poll_bme_task(void *pvSensorManager) {
 
             // Check to see if alerts ready.
             char thresholdCheck = bme->passedThreshold();
-            if(thresholdCheck != 0x00) {
+            if(thresholdCheck != !THD_ALERT) {
                 // Update alerts packet.
-                alertInfoPacket->airQualityStatus = (thresholdCheck & AQI_BREACHED_MASK) ? SAFE : UNSAFE;
-                alertInfoPacket->humidityStatus = (thresholdCheck & HUMIDITY_BREACHED_MASK) ? SAFE : UNSAFE;
-                alertInfoPacket->pressureStatus = (thresholdCheck & PRESSURE_BREACHED_MASK) ? SAFE : UNSAFE;
-                alertInfoPacket->temperatureStatus = (thresholdCheck & TEMPERATURE_BREACHED_MASK) ? SAFE : UNSAFE;
-                alertInfoPacket->co2Status = (thresholdCheck & CO2_BREACHED_MASK) ? SAFE : UNSAFE;
-                alertInfoPacket->bVOCStatus = (thresholdCheck & VOC_BREACHED_MASK) ? SAFE : UNSAFE;
+                alertInfoPacket->airQualityStatus = (thresholdCheck & AQI_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->humidityStatus = (thresholdCheck & HUMIDITY_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->pressureStatus = (thresholdCheck & PRESSURE_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->temperatureStatus = (thresholdCheck & TEMPERATURE_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->co2Status = (thresholdCheck & CO2_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->bVOCStatus = (thresholdCheck & VOC_BREACHED_MASK) ? UNSAFE : SAFE;
 
                 // Notify alert transmission task.
                 if(!SERIAL_ONLY_MODE) xTaskNotify(tx_alerts_handle, -1, eNoAction);
@@ -297,20 +343,23 @@ void SensorManager::initAllSensors(){
  * Initialze the Sentry's 4 Ultrasonic Sensors.
  */
 void SensorManager::initUS() {
+    // Construct the ultrasonic sensors.
     frontUS = new HCSR04(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM, this);
     backUS = new HCSR04(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM, this);
     leftUS = new HCSR04(TRIG_L, ECHO_L, L_US_ID, DEF_L_OBS_LIM, this);
     rightUS = new HCSR04(TRIG_R, ECHO_R, R_US_ID, DEF_R_OBS_LIM, this);
 
+    // Initialize the ultrasonic sensors.
     frontUS->init();
     leftUS->init();
     rightUS->init();
     backUS->init();
 
-    frontUS->setThreshold(preferences);
-    leftUS->setThreshold(preferences);
-    rightUS->setThreshold(preferences);
-    backUS->setThreshold(preferences);
+    // Set the human presence estimation thresholds of the ultrasonic sensors.
+    frontUS->setHpeThreshold(preferences);
+    leftUS->setHpeThreshold(preferences);
+    rightUS->setHpeThreshold(preferences);
+    backUS->setHpeThreshold(preferences);
 }
 
 /**
@@ -331,10 +380,10 @@ void SensorManager::initBME() {
 
 void SensorManager::attachAllInterrupts(){
     // Attach ultrasonic interrupts.
-    attachInterruptArg(ECHO_F, on_front_us_echo_changed, &frontUS, CHANGE);
-    attachInterruptArg(ECHO_B, on_back_us_echo_changed, &backUS, CHANGE);
-    attachInterruptArg(ECHO_L, on_left_us_echo_changed, &leftUS, CHANGE);
-    attachInterruptArg(ECHO_R, on_right_us_echo_changed, &rightUS, CHANGE);
+    attachInterruptArg(ECHO_F, on_front_us_echo_changed, frontUS, CHANGE);
+    attachInterruptArg(ECHO_B, on_back_us_echo_changed, backUS, CHANGE);
+    attachInterruptArg(ECHO_L, on_left_us_echo_changed, leftUS, CHANGE);
+    attachInterruptArg(ECHO_R, on_right_us_echo_changed, rightUS, CHANGE);
 }
 
 // Per name.
@@ -362,15 +411,22 @@ void SensorManager::beginAllTasks() {
 }
 
 HCSR04* SensorManager::fetchUS(SensorID id) {
+    HCSR04 *res = NULL;
     switch (id) {
-        case F_US_ID: return frontUS;
-        case B_US_ID: return backUS;
-        case L_US_ID: return leftUS;
-        case R_US_ID: return rightUS;
+        case F_US_ID: 
+            res = frontUS;
+            break;
+        case B_US_ID: 
+            res = backUS;
+            break;
+        case L_US_ID: 
+            res = leftUS;
+            break;
+        case R_US_ID: 
+            res = rightUS;
+            break;
     }
-
-    // Return.
-    return NULL;
+    return res;
 }
 
 BME688* SensorManager::fetchBME() {
@@ -398,10 +454,10 @@ UserSentryConfig *SensorManager::getUserSentryConfigDataPacket() {
 }
 
 void SensorManager::updateSensorThresholds() {
-    frontUS->setThreshold(preferences);
-    backUS->setThreshold(preferences);
-    leftUS->setThreshold(preferences);
-    rightUS->setThreshold(preferences);
+    frontUS->setHpeThreshold(preferences);
+    backUS->setHpeThreshold(preferences);
+    leftUS->setHpeThreshold(preferences);
+    rightUS->setHpeThreshold(preferences);
     mic->setThreshold(preferences);
     bme688->setThresholds(preferences);
 }

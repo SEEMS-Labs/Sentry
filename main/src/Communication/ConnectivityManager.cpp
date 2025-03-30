@@ -367,8 +367,7 @@ void ConnectivityManager::initFirebase() {
     // Attempt to connect to Firebase with a timeout.
     Serial.println("Check for succesful Sentry Connection to Firebase.");
     ulong startTime = millis();
-    int timeoutMax = 10000;
-    while (!_fbApp.ready() && (millis() - startTime) < timeoutMax) {
+    while (!_fbApp.ready() && (millis() - startTime) < FB_CONN_TIMEOUT_PERIOD) {
         //Serial.println("Waiting for Firebase to be ready...");
         _fbApp.loop();
         delay(1); // Give Firebase more time to stabilize.
@@ -376,7 +375,7 @@ void ConnectivityManager::initFirebase() {
     ulong endTime = millis();
 
     // Show the connection status and timed value.
-    if((endTime - startTime) < timeoutMax && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
+    if((endTime - startTime) < FB_CONN_TIMEOUT_PERIOD && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
     else Serial.println("Connection to Firebase timed out.");
     
     // Deal with non connection state.

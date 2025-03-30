@@ -8,6 +8,8 @@
 
 void user_ctrld_mvmt_task(void *pvTB9051FTG);   // User controlled movement task.
 void erw_mvmt_task(void *pvTB9051FTG);          // Enhanced Random Walk movement task.
+void monitor_ocm_task(void *pvTB9051FTG);           // Current Monitoring output task.
+void monitor_diag_task(void *pvTB9051FTG);          // Motor Diagnostic Pin monitoring task.
 
 /**
  * Represents the TB9051FTG Motor Driver that drives a single
@@ -23,11 +25,28 @@ class TB9051FTG {
         void initTasks();
         BaseType_t beginUserControlledMovementTask();
         BaseType_t beginEnhancedRandomWalkMovementTask();
+        BaseType_t beginMotorCurrentMonitoringTask();
         
     public:
         TB9051FTG(UserDriveCommands *driveCommands) : 
-            leftMotor(L_MOT_PWM1, L_MOT_PWM2), 
-            rightMotor(R_MOT_PWM2, R_MOT_PWM1),
+            leftMotor(
+                L_MOT_PWM1, 
+                L_MOT_PWM2, 
+                L_MOT_EN, 
+                L_ENC_A, 
+                L_ENC_B, 
+                L_MOT_DIAG,
+                L_MOT_OCM
+            ), 
+            rightMotor(
+                R_MOT_PWM1, 
+                R_MOT_PWM2, 
+                R_MOT_EN, 
+                R_ENC_A, 
+                R_ENC_B, 
+                R_MOT_DIAG,
+                R_MOT_OCM
+            ),
             driveCommands(driveCommands) {};
 
 
@@ -48,6 +67,9 @@ class TB9051FTG {
 
         // Rotate the Sentry rightwards.
         void rotateRight();            
+
+        Motor *getLeftMotor();
+        Motor *getRightMotor();
 
         /**
          * Stops the Sentry's movement by either braking or coasting. 

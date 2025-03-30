@@ -4,7 +4,6 @@
  * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
  */
 void Microphone::init() {
-    analogReadResolution(12);
     enable();
 }
 
@@ -115,7 +114,7 @@ void Microphone::setThresholdAndUpdatePreferences(Preferences preferences) {
  */
 char Microphone::passedThreshold() {
     float res = averageBuffer();
-    return (res > noiseThreshold) ? 0xFF : 0x00;
+    return (res > noiseThreshold) ? THD_ALERT : !THD_ALERT;
 }
 
 /**

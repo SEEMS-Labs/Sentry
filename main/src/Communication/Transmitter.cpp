@@ -13,16 +13,27 @@ void tx_alerts_task(void *pvTransmitter) {
     // Initialize task.
     TickType_t xLastWakeTime = xTaskGetTickCount();
     Transmitter *transmitter = static_cast<Transmitter *>(pvTransmitter);
+    ulong lastTime = millis();
 
     // Enter task loop.
     for(;;) {
         
-        // Wait indefinitely for ALERT notification from Sensor readings.
-        uint32_t pulseFinishedEvent = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        yield();
+        // Wait for Alerts to be given.
+        ulTaskNotifyTake(
+            pdTRUE,             // Clear notification bits on exit..
+            portMAX_DELAY);     // Time to wait for notif to be recieved. Setting this as Max delay 
+                                // functionally means a seperate delay isn't required.
 
-        // Update firebase w/ Alerts that are present.
-        //transmitter->transmitAlerts();
+        // Take firebase app mutex for uniterrupted transmission.
+        if(xSemaphoreTake(firebase_app_mutex, portMAX_DELAY) == pdTRUE) {
+            Serial.printf("Time Elapsed since last Alert Transmit: %lu\n", millis() - lastTime);
+            Serial.println("<-- FBAPP Mutex (Alert Tx Took).");
+            transmitter->transmitAlerts();
+            xSemaphoreGive(firebase_app_mutex);
+            lastTime = millis();
+            Serial.println("--> FBAPP Mutex (Alert Tx Gave).");
+        }
+        else Serial.println("FBAPP unavailible. Waiting. (Alert Tx Task)");
     }
 }
 
@@ -50,7 +61,7 @@ void tx_bme_data_task(void *pvTransmitter) {
             lastTime = millis();
             //Serial.println("--> FBAPP Mutex (BME Tx Gave).");
         }
-        else Serial.println("FBAPP unavailible. Waiting. (Tx Task)");
+        else Serial.println("FBAPP unavailible. Waiting. (BME Tx Task)");
         
     }
 }
@@ -118,7 +129,7 @@ void Transmitter::buildMicDataTransmisison() {
  * Per name. Build up the alerts via Json Strings and then send them over to 
  * the proper address in Firebase.
  */
-object_t Transmitter::buildAlertsTransmission() {
+void Transmitter::buildAlertsTransmission() {
 
     // Write all alert status' to Json Strings.
     jsonWriter.create(alertTxBuffer[1], AQ_ALERT_KEY, envStatus->airQualityStatus);
@@ -128,7 +139,6 @@ object_t Transmitter::buildAlertsTransmission() {
     jsonWriter.create(alertTxBuffer[5], PRESSURE_ALERT_KEY, envStatus->pressureStatus);
     jsonWriter.create(alertTxBuffer[6], MOTION_ALERT_KEY, envStatus->motion);
     jsonWriter.join(alertTxBuffer[0], 6, alertTxBuffer[1], alertTxBuffer[2], alertTxBuffer[3], alertTxBuffer[4], alertTxBuffer[5], alertTxBuffer[6]);
-    return alertTxBuffer[0];
 }
 
 /**
@@ -313,7 +323,7 @@ void Transmitter::transmitAlerts() {
     // If so, attempt reconnection....
 
     else {
-        object_t jsonString = buildAlertsTransmission();
+        buildAlertsTransmission();
         updateFirebase(FB_ALERTS_ADDRESS, DataTransmissionType::tx_ALERTS);
     }
 }

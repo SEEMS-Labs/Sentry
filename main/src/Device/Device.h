@@ -8,9 +8,6 @@
 #include "ConnectivityManager.h"
 #include "TB9051FTG.h"
 
-// Default "speed" of the Sentry based on testing and PWM duty cycle (~78%).
-#define DEFAULT_SPEED 200
-
 /**
  * This class represents the Sentry as a whole. It is from here the Sentry will be initialized and controlled.
  */
@@ -22,8 +19,8 @@ class Device {
         TB9051FTG _drive_system;                        // Drive System Management Unit.
 
         void initSensorSystem();                        // Start the BME688, Microphone, and Ultrasonics.
-        void initDriveSystem();                         // Start the BME688, Microphone, and Ultrasonics.
-        void initCommunicationSystem();                 // Start the BME688, Microphone, and Ultrasonics.
+        void initDriveSystem();                         // Start the Motors
+        void initCommunicationSystem();                 // Start the Commmunications.
 
     public:
         Device( 
@@ -34,6 +31,7 @@ class Device {
             ObstacleData *obstacleInfo) :                           // Address to the global obstacle data packet.
             _communication_system(envData, envStatus, userConfiguration, userMovementCommands),
             _sensor_system(envData, envStatus, userConfiguration, obstacleInfo),
+            _drive_system(userMovementCommands),
             _stateManager(StateManager::getManager()) {}
 
         // Start the Sentry.

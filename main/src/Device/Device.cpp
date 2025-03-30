@@ -2,6 +2,9 @@
 
 void Device::begin() {
     
+    // Enable the Sentry's ADC to 12-bit resolution.
+    analogReadResolution(12);
+
     // Initialize Sentry Subsystems.
     initSensorSystem();
     initDriveSystem();
@@ -77,16 +80,24 @@ void Device::test_bme_and_mic_data_to_firebase() {
 }
 
 void Device::test_US() {
+
+    // Init comms systems.
+    _communication_system.begin();
+    
+    // Initialize sensor system stuff.
     _sensor_system.initUS();
     _sensor_system.attachAllInterrupts();
-    _sensor_system.beginAllTasks();
+    _sensor_system.beginReadUltrasonicTask();
+    _sensor_system.beginUpdateThresholdTask();
+    StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
+
+    // Diasble Left/Right/Back ultrasonics.
+    _sensor_system.fetchUS(B_US_ID)->disable();
+    _sensor_system.fetchUS(L_US_ID)->disable();
+    _sensor_system.fetchUS(R_US_ID)->disable();  
 }
 
 void Device::initSensorSystem() {
-    // Analog resolution.
-    //analogReadResolution(12);
-
-    // Sensors.
     _sensor_system.initAllSensors();
     _sensor_system.attachAllInterrupts();
     _sensor_system.beginAllTasks();
@@ -94,6 +105,7 @@ void Device::initSensorSystem() {
 
 void Device::initDriveSystem() {
     _drive_system.init();
+    _drive_system.getLeftMotor()->disable();
     _drive_system.setSpeed(DEFAULT_SPEED);
 }
 
@@ -113,22 +125,30 @@ void Device::test_bme_data_to_serial() {
 
 void Device::test_motor() {
     // Initialize.
+    analogReadResolution(12);
     initDriveSystem();
 
-    // Drive Forwards.
-    _drive_system.moveForward();
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    for(int i = 0; i < 20; i++) {
+        // Drive Forwards.
+        Serial.println("Moving Forward!");
+        _drive_system.moveForward();
+        vTaskDelay(pdMS_TO_TICKS(10000));
 
-    // Stop.
-    _drive_system.stop(stopType::BRAKE);
-    vTaskDelay(pdMS_TO_TICKS(10));
-    
-    // Drive Backwards.
-    _drive_system.moveBackward();
-    vTaskDelay(pdMS_TO_TICKS(5000));
+        // Stop.
+        //Serial.println("Stopping!");
+        //_drive_system.stop(stopType::BRAKE);
+        //vTaskDelay(pdMS_TO_TICKS(10));
+        
+        // Drive Backwards.
+        //Serial.println("Moving Backward!");
+        //_drive_system.moveBackward();
+        //vTaskDelay(pdMS_TO_TICKS(10000));
 
-    // Stop.
-    _drive_system.stop(stopType::BRAKE);
+        // Stop.
+        Serial.println("Last Stop!");
+        _drive_system.stop(stopType::BRAKE);
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 
 void Device::test_connection_to_firebase() {
@@ -140,7 +160,7 @@ void Device::test_connection_to_firebase() {
     _communication_system.begin();
 }
 
-void Device::test(){
+void Device::test() {
     Serial.println("Beginning Test");
     for(int i = 0; i < 10; i++) {
         Serial.println(".");
