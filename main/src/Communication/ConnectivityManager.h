@@ -114,6 +114,7 @@ public:
     AsyncClientClass *getAsyncClient();
     FirebaseApp *getFbApp();
     AsyncResult getSentryLinkStreamResult();
+    Transmitter *getTransmitter();
     Receiver *getReceiver();
 };
 

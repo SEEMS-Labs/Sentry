@@ -19,6 +19,7 @@ bool ConnectivityManager::checkForCredentials() {
     }
 
     // Create preferences namespace in read mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_CREDS, true);
     
     // Check for intial exisitence of SSID (if this doesn't exist, this is the first Sentry init).
@@ -38,6 +39,7 @@ bool ConnectivityManager::checkForCredentials() {
     if(!credsExist) Serial.println("Credentials did not exist.");
     // End the preferences namespace and return.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
     return credsExist;
 }
 
@@ -266,6 +268,7 @@ void ConnectivityManager::onCredentialessStartup() {
  */
 void ConnectivityManager::updatePreferredCredentials() {
     // Create preferences namespace in read/write mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_CREDS, false);  
 
     // update credentials. 
@@ -278,6 +281,7 @@ void ConnectivityManager::updatePreferredCredentials() {
     Serial.printf("Newly Stored Creds: SSID = %s, PASS = %s\n", name.c_str(), password.c_str());
     // End preferences namespace.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
 }
 
 /**
@@ -551,4 +555,5 @@ AsyncResult ConnectivityManager::getSentryLinkStreamResult() {
     return streamResult;
 }
 
+Transmitter *ConnectivityManager::getTransmitter() { return _transmitter; }
 Receiver *ConnectivityManager::getReceiver() { return _receiver; }

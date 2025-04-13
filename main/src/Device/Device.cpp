@@ -1,8 +1,16 @@
 #include "device.h"
 
+// Semaphores.
+portMUX_TYPE preferencesMutex = portMUX_INITIALIZER_UNLOCKED;
+SemaphoreHandle_t alert_buffer_mutex = NULL;
+
 void Device::begin() {
     
-    // Enable the Sentry's ADC to 12-bit resolution.
+    // Semaphores.
+    createSemaphores();
+
+    // Enable the Sentry's ADC.
+    analogSetAttenuation(ADC_11db);
     analogReadResolution(12);
 
     // Initialize Sentry Subsystems.
@@ -42,9 +50,12 @@ void Device::test_bme_data_to_firebase() {
         Serial.println(".");
         delay(500);
     }
+    createSemaphores();
     _communication_system.begin();
     _sensor_system.initBME();
     _sensor_system.beginReadBMETask();
+    _sensor_system.beginUpdateThresholdTask();
+    StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
 }
 
 void Device::test_mic_data_to_firebase() {
@@ -53,9 +64,22 @@ void Device::test_mic_data_to_firebase() {
         Serial.println(".");
         delay(500);
     }
+    initADC();
+    createSemaphores();
     _communication_system.begin();
     _sensor_system.initMic();
     _sensor_system.beginReadMicrophoneTask();
+    _sensor_system.beginUpdateThresholdTask();
+    StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
+}
+
+void Device::test_mic() {
+    initADC();
+    createSemaphores();
+    _sensor_system.initMic();
+    BaseType_t taskCreated = _sensor_system.beginReadMicrophoneTask();
+    if(taskCreated != pdPASS) Serial.printf("Read Microphone task not created. Fail Code: %d\n", taskCreated);
+    else Serial.println("Read Microphone task created.");
 }
 
 void Device::test_bme_and_mic_data_to_firebase() {
@@ -82,7 +106,8 @@ void Device::test_bme_and_mic_data_to_firebase() {
 void Device::test_US() {
 
     // Init comms systems.
-    _communication_system.begin();
+    createSemaphores();
+    //_communication_system.begin();
     
     // Initialize sensor system stuff.
     _sensor_system.initUS();
@@ -91,10 +116,6 @@ void Device::test_US() {
     _sensor_system.beginUpdateThresholdTask();
     StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
 
-    // Diasble Left/Right/Back ultrasonics.
-    _sensor_system.fetchUS(B_US_ID)->disable();
-    _sensor_system.fetchUS(L_US_ID)->disable();
-    _sensor_system.fetchUS(R_US_ID)->disable();  
 }
 
 void Device::initSensorSystem() {
@@ -119,8 +140,15 @@ void Device::loop() {
 }
 
 void Device::test_bme_data_to_serial() {
+    Serial.println("Beginning Transmission of bME Data  over SErial");
+    for(int i = 0; i < 10; i++) {
+        Serial.println(".");
+        delay(500);
+    }
+    createSemaphores();
     _sensor_system.initBME();
     _sensor_system.beginReadBMETask();
+    StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
 }
 
 void Device::test_motor() {
@@ -167,6 +195,9 @@ void Device::test() {
         delay(500);
     }
 
+    initADC();
+    createSemaphores();
+
     UBaseType_t taskCount = uxTaskGetNumberOfTasks();
     Serial.printf("Number of running tasks Before: %d\n", taskCount);
 
@@ -187,6 +218,9 @@ void Device::test() {
 
     _sensor_system.beginReadMicrophoneTask();
     Serial.println("Mic Task Initialized.");
+
+    _sensor_system.beginUpdateThresholdTask();
+    Serial.println("Update Threshold Task Initialized.");
 
     taskCount = uxTaskGetNumberOfTasks();
     Serial.printf("Number of running tasks After: %d\n", taskCount);
@@ -219,3 +253,11 @@ void Device::showTaskMemoryUsage() {
 
 }
 
+void Device::createSemaphores() {
+    alert_buffer_mutex = xSemaphoreCreateMutex();
+}
+
+void Device::initADC() {
+    analogSetAttenuation(ADC_11db);
+    analogReadResolution(12);
+}

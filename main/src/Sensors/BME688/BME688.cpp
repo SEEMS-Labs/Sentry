@@ -8,6 +8,15 @@ void BME688::init() {
     Wire.setPins(sdi, sck);
     Wire.begin();
 
+    // Initiaize buffers.
+    for(int i = 0; i < bufferSize; i++) {
+        pastHumidity[i] = -710;
+        pastCO2[i] = -1;
+        pastIAQ[i] = -1;
+        pastPressure[i] = -1;
+        pastTemp[i] = -1;
+    }
+
     // Start BME688.
     sensor.begin(BME68X_I2C_ADDR_HIGH, Wire);
     enable();
@@ -34,6 +43,10 @@ bool BME688::readSensor(TickType_t xMaxBlockTime) {
 
     // Ensure reading was succesful.
     if(success) {
+
+        // Perform a check to see if the sensor is warmed up for threshold monitoring.
+        if(iaqIndex == bufferSize && !sensorWarmedUp) sensorWarmedUp = true;
+
         // Store the readings in their respective buffers.
         if(iaqIndex == bufferSize) iaqIndex = 0;
         pastIAQ[iaqIndex++] = sensor.iaq;
@@ -44,13 +57,10 @@ bool BME688::readSensor(TickType_t xMaxBlockTime) {
         if(pressureIndex == bufferSize) pressureIndex = 0;
         pastPressure[pressureIndex++] = sensor.pressure/100;    // div by 100 = hectoPascal.
 
-        if(vocIndex == bufferSize) vocIndex = 0;
-        pastVOC[vocIndex++] = sensor.breathVocEquivalent;
-
         if(tempIndex == bufferSize) tempIndex = 0;
         pastTemp[tempIndex++] = sensor.temperature;
-
-        if(humIndex == bufferSize) humIndex  = 0;
+        
+        if(humIndex == bufferSize) humIndex = 0;
         pastHumidity[humIndex++] = sensor.humidity;
 
         // Set the return results.
@@ -113,6 +123,8 @@ void BME688::disable() {
     sensor.updateSubscription(sensorList, numSensors, BSEC_SAMPLE_RATE_DISABLED);
 }
 
+bool BME688::isActive() { return active; }
+
 /**
  * Set this BME688's thresholds from memory.
  * @param preferences Access to Sentry NVM (permanent memory).
@@ -135,6 +147,7 @@ void BME688::setThresholdFromPreferences(Preferences preferences) {
     Serial.println("Checking if Custom BME Thresholds Exist.");
 
     // Create preferences namespace in read mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_SENSOR_THDS, true);
     
     // Check for intial exisitence of bme thresholds (if this doesn't exist, this is the first Sentry init).
@@ -147,7 +160,6 @@ void BME688::setThresholdFromPreferences(Preferences preferences) {
         iaqThreshold = preferences.getFloat(PREF_IAQ_THD, DEF_AQI_LIM);
         //co2Threshold = preferences.getFloat(PREF_CO2_THD, DEF_CO2_LIM);
         pressureThreshold = preferences.getFloat(PREF_PRES_THD, DEF_PRES_LIM);
-        //vocThreshold = preferences.getFloat(PREF_VOC_THD, DEF_VOC_LIM);
         tempThreshold = preferences.getFloat(PREF_TEMP_THD, DEF_TEMP_LIM);
         humIndex = preferences.getFloat(PREF_HUM_THD, DEF_HUM_LIM);
     }
@@ -155,6 +167,7 @@ void BME688::setThresholdFromPreferences(Preferences preferences) {
     
     // End the preferences namespace and return.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
 }
 
 /**
@@ -165,6 +178,7 @@ void BME688::setThresholdFromPreferences(Preferences preferences) {
 void BME688::setThresholdAndUpdatePreferences(Preferences preferences) {
 
     // Open thresholds namespace and set those that have changed.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_SENSOR_THDS, false);
 
     // Deal with temperature.
@@ -213,6 +227,7 @@ void BME688::setThresholdAndUpdatePreferences(Preferences preferences) {
 
     // Close the namespace.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
 }
 
 /**
@@ -228,8 +243,10 @@ void BME688::setThresholdAndUpdatePreferences(Preferences preferences) {
  */
 char BME688::passedThreshold() {
     
-    // Calculate the past average of all buffers.
+    // Calculate the past average of all buffers given that the data in the sensors buffers are valid.
     char res = 0;
+    if(!sensorWarmedUp)  return res;
+
     setCurrentVirtualSensor(BSEC_OUTPUT_IAQ);
     float iaqAvg = averageBuffer();
 
@@ -238,21 +255,26 @@ char BME688::passedThreshold() {
 
     setCurrentVirtualSensor(BSEC_OUTPUT_RAW_PRESSURE);
     float presAvg = averageBuffer();
-
-    setCurrentVirtualSensor(BSEC_OUTPUT_BREATH_VOC_EQUIVALENT);
-    float vocAvg = averageBuffer();
     
-    setCurrentVirtualSensor(BSEC_OUTPUT_RAW_TEMPERATURE);
+    setCurrentVirtualSensor(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE);
     float tempAvg = averageBuffer();
 
-    setCurrentVirtualSensor(BSEC_OUTPUT_RAW_HUMIDITY);
+    setCurrentVirtualSensor(BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY);
     float humAvg = averageBuffer();
     
+    /*
+    Serial.println("---------------------");
+    Serial.printf("Avg IAQ: %f, IAQ Thd: %f\n", iaqAvg, iaqThreshold);
+    Serial.printf("Avg Pres: %f, Pres Thd: %f\n", presAvg, pressureThreshold);
+    Serial.printf("Avg Temp: %f, Temp Thd: %f\n", tempAvg, tempThreshold);
+    Serial.printf("Avg Hum: %f, Hum Thd: %f\n", humAvg, humThreshold);
+    Serial.println("---------------------");
+    //*/
+
     // Perform masking operation. 
     if(iaqAvg > iaqThreshold) res |= AQI_BREACHED_MASK;
     //if(co2Avg > co2Threshold) res |= CO2_BREACHED_MASK;
     if(presAvg > pressureThreshold) res |= PRESSURE_BREACHED_MASK;
-    //if(vocAvg > vocThreshold) res |= VOC_BREACHED_MASK;
     if(tempAvg > tempThreshold) res |= TEMPERATURE_BREACHED_MASK;
     if(humAvg > humThreshold) res |= HUMIDITY_BREACHED_MASK;
 
@@ -282,10 +304,6 @@ float BME688::averageBuffer() {
 
         case BSEC_OUTPUT_RAW_PRESSURE :
             for(int i = 0; i < bufferSize; i++) average += pastPressure[i];
-            break;
-
-        case BSEC_OUTPUT_BREATH_VOC_EQUIVALENT :
-            for(int i = 0; i < bufferSize; i++) average += pastVOC[i];
             break;
 
         case BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE :
@@ -340,15 +358,6 @@ float BME688::get_pressure_reading() {
 }
 
 /**
- * Get the last VOC reading.
- * @return The last known VOC reading.
- */
-float BME688::get_VOC_reading() { 
-    if(vocIndex > 0) return pastVOC[vocIndex - 1]; 
-    else return pastVOC[bufferSize - 1];
-}
-
-/**
  * Get the last Temperature reading.
  * @return The last known temperature reading.
  */
@@ -362,8 +371,10 @@ float BME688::get_temp_reading() {
  * @return The last known humidity reading.
  */
 float BME688::get_humidity_reading() { 
-    if(humIndex > 0) return pastHumidity[humIndex - 1]; 
-    else return pastHumidity[bufferSize - 1];
+    float res = -1;
+    if(humIndex > 0) res = pastHumidity[humIndex - 1]; 
+    else res = pastHumidity[bufferSize - 1];
+    return res;
 }
 
 /**

@@ -36,20 +36,20 @@ void Receiver::receiveSentryLinkStream(AsyncResult &userData) {
     if(repeatEvent) return;
 
     // Deal with non relevant events.
-    if (userData.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.eventLog().message().c_str(), userData.eventLog().code());
-    else if (userData.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", userData.uid().c_str(), userData.debug().c_str());
-    else if (userData.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.error().message().c_str(), userData.error().code());
+    if(userData.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.eventLog().message().c_str(), userData.eventLog().code());
+    else if(userData.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", userData.uid().c_str(), userData.debug().c_str());
+    else if(userData.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", userData.uid().c_str(), userData.error().message().c_str(), userData.error().code());
 
     // Deal with availible data.
-    else if(userData.available()) {        
+    else if(userData.available()) {    
+
         // Update the last stream result to avoid repeate processing.
         RealtimeDatabaseResult &RTDB = userData.to<RealtimeDatabaseResult>();
         lastReadId = userData.uid();
-        lastReadData = RTDB.to<String>();
+        lastReadPayload = userData.payload();
 
         // Notify the appropriate tasks.
         if (RTDB.isStream()) {
-            
             // Port data received to the proper form for decoding.
             uint64_t bitsToBeDecoded = RTDB.to<uint64_t>();
             
@@ -61,14 +61,16 @@ void Receiver::receiveSentryLinkStream(AsyncResult &userData) {
                 Serial.println("Controller Field Updated. Notifying Manual Movement task if needed.");
                 decodeAndUpdateUserDriveCommands((uint32_t) bitsToBeDecoded);
                 if(_stateManager->getSentryMovementState() == MovementState::ms_MANUAL)
-                    xTaskNotify(user_ctrld_mvmt_handle, -1, eNoAction);
+                    if(user_ctrld_mvmt_handle != NULL) xTaskNotify(user_ctrld_mvmt_handle, -1, eNoAction);
+                    else Serial.println("Failed to notify user_ctrld_mvmt_task. Task likely not initialized.");
             }
 
             // User threhsold configuration field updated.
             else if(fieldPath.equals(SL_CONFIG_PATH)) {
                 Serial.println("User Configuration Field Updated. Notifying Update_Thresholds_Task.");
                 decodeAndUpdateUserConfigurationData((uint64_t) bitsToBeDecoded);
-                xTaskNotify(update_thresholds_handle, -1, eNoAction);
+                if(update_thresholds_handle != NULL) xTaskNotify(update_thresholds_handle, -1, eNoAction);
+                else Serial.println("Failed to notify update_thresholds_task. Task likely not initialized.");
             }
 
             // User in-app activity status updated.
@@ -154,7 +156,7 @@ UserDataType Receiver::getDataTypeReceived(String dataPathReceived) {
  */
 void Receiver::decodeAndUpdateUserConfigurationData(uint64_t userConfigData) {
 
-    Serial.printf("Data to be decoded: %ld\n", userConfigData);
+    Serial.printf("Data to be decoded: %llu\n", userConfigData);
 
     // Decode.
     float noiseLvl = (userConfigData >> SL_UserCfgInfo::SPL_LSB) & SL_UserCfgInfo::THN_MASK;
@@ -278,14 +280,7 @@ bool Receiver::checkIfBLEDataAvailible(UserDataType udtData) {
 }
 
 bool Receiver::checkForRepeatedResult(AsyncResult res) {
-    RealtimeDatabaseResult &db_res = res.to<RealtimeDatabaseResult>();
-
-    bool sameIds = lastReadId.equals(res.uid());
-    bool sameData = lastReadData.equals(db_res.to<String>());
-
-    if(!sameIds || !sameData) {
-        //Serial.printf("ID Difference[%s == %s]\n", res.uid().c_str(), lastReadId.c_str());
-        //Serial.printf("Data Difference[%s == %s]\n", db_res.to<String>().c_str(), lastReadData.c_str());
-    }
-    return (sameIds && sameData);
+    bool idsEqual = lastReadId.equals(res.uid());
+    bool payloadsEqual = lastReadPayload.equals(res.payload());
+    return (idsEqual && payloadsEqual);
 }

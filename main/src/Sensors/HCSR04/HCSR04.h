@@ -11,6 +11,10 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
+#define HPE_PERCENT_DIFF 2      // Meaningful percent difference between current buffer average and HPE Threshold (in %).
+#define HPE_WEAK_PERCENT 5      // Percent difference between current and last buffer averages weakly indicating presence (in %).
+#define HPE_STRONG_PERCENT 10   // Percent difference between current and last buffer averages strongly indicating presence (in %).
+
 // Forward definition of SensorManager.
 class SensorManager;
 
@@ -56,9 +60,14 @@ class HCSR04 : public SensorInterface {
         int distIndex = 0;
         
         /**
+         * Last average of the buffer.
+         */
+        float lastBufferAverage = 0;
+
+        /**
          * Size of distance buffer.
          */
-        static constexpr int bufferSize = 256;
+        static constexpr int bufferSize = 5;
 
         /**
          * Buffer of past distances measured.
@@ -132,9 +141,13 @@ class HCSR04 : public SensorInterface {
 
         /**
          * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.
-         * @return A byte where the Bit 0 (LSB) represents ths obstacle detection threshold 
-         * and Bit 1 represents the presence detection threshold. A bit set to 1 indicates 
-         * the distance threshold has been breached and a bit set to 0 indicates the opposite.
+         * @return A byte where the least two significant bits represent detection threshold
+         * breaches and the next 3 represent the strength of the breach.
+         * Bit 0: Obstacle detection,
+         * Bit 1: Human presence estimation,
+         * Bit 2: Strong breach (certain that the barrier has been broken).
+         * Bit 3: Moderate breach.
+         * Bit 4: Weak breach.
          */
         char passedThreshold() override;
 
@@ -154,7 +167,7 @@ class HCSR04 : public SensorInterface {
          * Check if this sensor is active or not.
          * @return True if sensor is active, false otherwise.
          */
-        bool isActive();
+        bool isActive() override;
 
         /**
          * Set this sensors obstacle detection threshold.
@@ -186,6 +199,8 @@ class HCSR04 : public SensorInterface {
          * @return The last known distance reading from this sensor.
          */
         float getDistanceReading();
+
+        float getLastBufferAverage();
 };
 
 // End include guard.

@@ -1,0 +1,138 @@
+#include <Arduino.h>
+#include "sentryConfigInfo.h"
+
+// Ultrasonic Sensor Pin Definitions.
+#define ECHO ECHO_F
+#define TRIGGER TRIG_F
+
+// Ultrasonic sensor variables.
+const int DIFF = 2;
+const float HPE_THRESHOLD = 6;
+const int bufferSize = 5;
+int bufferIndex = 0;
+float lastBufferAverage, currentBufferAverage;
+ulong currentReadingTime = 0;
+float buffer[bufferSize];
+double duration, inches;
+char str[100];
+
+// Ultrasonic sensor Functions.
+void initSensor();
+void readSensor();
+float getLastReading();
+float averageSensor();
+bool checkAlert();
+void printData();
+
+// Tasks.
+TaskHandle_t poll_sensor_handle = NULL;
+TaskHandle_t display_data_handle = NULL;
+void poll_sensor_task(void *pvParams);
+void display_data_task(void *pvParams);
+void beginTasks();
+
+// Setup code. Runs once.
+void setup() {
+
+    // Inititialze.
+    Serial.begin(BAUD_RATE);
+    initSensor();
+    Serial.println("Setting up");
+    for(int i = 0; i < 5; i++) {
+        Serial.println(".");
+        delay(1000);
+    }
+    Serial.println("Time(ms) \tLastReading \tLastBufferAvg \tCurrBufferAvg \tAlert");
+    beginTasks();
+}
+void loop() {}
+
+void initSensor() {
+    // Configure trigger and echo.
+    pinMode(TRIGGER, OUTPUT);
+    pinMode(ECHO, INPUT);
+}
+
+void readSensor() {
+    // Timestamp.
+    currentReadingTime = millis();
+
+    // Give a short LOW pulse beforehand to ensure a clean HIGH pulse:
+    digitalWrite(TRIGGER, LOW);
+    delayMicroseconds(5);
+    digitalWrite(TRIGGER, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIGGER, LOW);
+
+    duration = pulseIn(ECHO, HIGH);
+
+    // Convert the time into a distance
+    inches = (duration / 2) / 74; // Divide by 74 or multiply by 0.0135
+    
+    // Store info.
+    lastBufferAverage = averageSensor();
+    if(bufferIndex == bufferSize) bufferIndex = 0;
+    buffer[bufferIndex++] = inches;
+    currentBufferAverage = averageSensor();
+
+    // Output info.
+    Serial.printf("Actual Current Reading: %.2f in.\n", inches);
+}
+
+float averageSensor() {
+    float res = 0.0;
+    for(int i = 0; i < bufferSize; i++) res += buffer[i];
+    return res/bufferSize;
+}
+
+bool checkAlert() {
+    float cmpValue = HPE_THRESHOLD/currentBufferAverage - 1;
+    return (cmpValue >= DIFF/100.0);
+}
+
+float getLastReading() {
+    int index = (bufferIndex > 0) ? bufferIndex - 1: bufferSize - 1;
+    return buffer[index];
+}
+
+void printData() {
+    Serial.printf("%u \t%f \t%f \t%f \t%d\n", currentReadingTime, getLastReading(), lastBufferAverage, currentBufferAverage, checkAlert());
+}
+
+void poll_sensor_task(void *pvParams) {
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    for(;;) {
+        readSensor();
+        xTaskNotify(display_data_handle, -1, eNoAction);
+        vTaskDelayUntil(&xLastWakeTime, 1000);
+    }
+}
+
+void display_data_task(void *pvParams) {
+    for(;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        printData();
+    }
+}
+
+void beginTasks() {
+    xTaskCreatePinnedToCore(
+        &poll_sensor_task,                  // Pointer to task function.
+        "poll_sensor_Task",                 // Task name.
+        4096,       // Size of stack allocated to the task (in bytes).
+        NULL,                           // Pointer to parameters used for task creation.
+        1,    // Task priority level.
+        &poll_sensor_handle,                // Pointer to task handle.
+        1                               // Core that the task will run on.
+    );
+
+    xTaskCreatePinnedToCore(
+        &display_data_task,                  // Pointer to task function.
+        "poll_US_Task",                 // Task name.
+        4096,       // Size of stack allocated to the task (in bytes).
+        NULL,                           // Pointer to parameters used for task creation.
+        1,    // Task priority level.
+        &display_data_handle,                // Pointer to task handle.
+        1                               // Core that the task will run on.
+    );
+}

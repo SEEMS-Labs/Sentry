@@ -26,12 +26,14 @@ void tx_alerts_task(void *pvTransmitter) {
 
         // Take firebase app mutex for uniterrupted transmission.
         if(xSemaphoreTake(firebase_app_mutex, portMAX_DELAY) == pdTRUE) {
-            Serial.printf("Time Elapsed since last Alert Transmit: %lu\n", millis() - lastTime);
-            Serial.println("<-- FBAPP Mutex (Alert Tx Took).");
+            //Serial.printf("Time Elapsed since last Alert Transmit: %lu\n", millis() - lastTime);
+            StateManager::getManager()->setSentryDataTransmissionState(DataTransmissionState::ds_TRANSMIT);
+            //Serial.println("<-- FBAPP Mutex (Alert Tx Took).");
             transmitter->transmitAlerts();
             xSemaphoreGive(firebase_app_mutex);
             lastTime = millis();
-            Serial.println("--> FBAPP Mutex (Alert Tx Gave).");
+            //Serial.println("--> FBAPP Mutex (Alert Tx Gave).");
+            StateManager::getManager()->setSentryDataTransmissionState(DataTransmissionState::ds_IDLE);
         }
         else Serial.println("FBAPP unavailible. Waiting. (Alert Tx Task)");
     }
@@ -51,7 +53,6 @@ void tx_bme_data_task(void *pvTransmitter) {
             pdTRUE,             // Clear notification bits on exit..
             portMAX_DELAY);     // Time to wait for notif to be recieved. Setting this as Max delay 
                                 // functionally means a seperate delay isn't required.
-
         // Take firebase app mutex for uniterrupted transmission.
         if(xSemaphoreTake(firebase_app_mutex, portMAX_DELAY) == pdTRUE) {
             //Serial.printf("Time Elapsed since last BME Transmit: %lu\n", millis() - lastTime);
@@ -62,7 +63,6 @@ void tx_bme_data_task(void *pvTransmitter) {
             //Serial.println("--> FBAPP Mutex (BME Tx Gave).");
         }
         else Serial.println("FBAPP unavailible. Waiting. (BME Tx Task)");
-        
     }
 }
 
@@ -116,9 +116,8 @@ void Transmitter::buildBmeDataTransmission() {
     jsonWriter.create(bmeTxBuffer[3], TMP_DATA_KEY, envData->temperatureLevel);
     jsonWriter.create(bmeTxBuffer[4], DB_SPL_DATA_KEY, envData->noiseLevel);
     jsonWriter.create(bmeTxBuffer[5], PRESSURE_DATA_KEY, envData->pressureLevel);
-    jsonWriter.create(bmeTxBuffer[6], VOC_DATA_KEY, envData->bVOClevel);
-    jsonWriter.create(bmeTxBuffer[7], CO2_DATA_KEY, envData->CO2Level);
-    jsonWriter.join(bmeTxBuffer[0], 7, bmeTxBuffer[1], bmeTxBuffer[2], bmeTxBuffer[3], bmeTxBuffer[4], bmeTxBuffer[5], bmeTxBuffer[6], bmeTxBuffer[7]);
+    jsonWriter.create(bmeTxBuffer[6], CO2_DATA_KEY, envData->CO2Level);
+    jsonWriter.join(bmeTxBuffer[0], 6, bmeTxBuffer[1], bmeTxBuffer[2], bmeTxBuffer[3], bmeTxBuffer[4], bmeTxBuffer[5], bmeTxBuffer[6]);
 }
 
 void Transmitter::buildMicDataTransmisison() {
@@ -156,6 +155,9 @@ void Transmitter::updateFirebase(String writeAddress, DataTransmissionType dtt) 
     // Transmit.
     bool txGood;
     fbApp->loop();   // For authentication purposes.
+    TaskHandle_t curTask = xTaskGetCurrentTaskHandle();
+    char taskName[16];
+    strncpy(taskName, pcTaskGetTaskName(curTask), 16);
     if(fbApp->ready()) {
     
         // General environmental data transmission.
@@ -176,7 +178,7 @@ void Transmitter::updateFirebase(String writeAddress, DataTransmissionType dtt) 
 
         // Sensor alerts.
         else if(dtt == DataTransmissionType::tx_ALERTS) {
-            Serial.println("Transmitting Alerts to Firebase");
+            //Serial.println("Transmitting Alerts to Firebase");
             txGood = firebase->set<object_t>(*aClient, FB_ALERTS_ADDRESS, alertTxBuffer[0]);
         }
         
@@ -287,7 +289,6 @@ void Transmitter::transmitSensorData(DataTransmissionType dtt) {
     // Later: Check to see if Wi-Fi is still connected.
     // If so, attempt reconnection....
     if(_stateManager->getSentryConnectionState() != ConnectionState::ns_FB_AND_WF) return;     
-    
     // Determine address to write to in Firebase and build the necessary packet for transmission.
     String writeAddress;
     switch(dtt) {
@@ -307,7 +308,6 @@ void Transmitter::transmitSensorData(DataTransmissionType dtt) {
             delay(100);
             break;
     }
-    
     // Update the identified address in firebase.
     updateFirebase(writeAddress, dtt);
 }
@@ -323,7 +323,11 @@ void Transmitter::transmitAlerts() {
     // If so, attempt reconnection....
 
     else {
-        buildAlertsTransmission();
+        if(xSemaphoreTake(alert_buffer_mutex, portMAX_DELAY) == pdTRUE) {
+            buildAlertsTransmission();        
+            xSemaphoreGive(alert_buffer_mutex);
+        }
+        
         updateFirebase(FB_ALERTS_ADDRESS, DataTransmissionType::tx_ALERTS);
     }
 }

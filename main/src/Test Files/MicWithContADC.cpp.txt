@@ -1,0 +1,99 @@
+#define CONVERSIONS_PER_PIN 20
+#define SAMPLING_FREQ 44100
+#define MIC_OUT 6
+#define ADS_ADDR 0x48
+#define SDI 1
+#define SCK 2
+
+TaskHandle_t read_mic_handle = NULL;
+void read_mic_task(void *pvParams);
+
+class Microphone {
+  private: 
+    int mic_pin;
+    static constexpr int pin_count = 1;
+    uint8_t adc_pins[pin_count] = {0};
+    float lastAverage = 0;
+    float currAverage = 0;
+    static constexpr int bufferSize = 20;
+    float pastSounds[bufferSize];
+    adc_continuous_data_t *result = NULL;
+
+
+  public:
+    Microphone(int mic_pin) : mic_pin(mic_pin) {}
+
+    void init() {
+      
+      // Setup Analog reading.
+      uint8_t arr[] = {(uint8_t) mic_pin};
+      adc_pins[0] = mic_pin;
+      analogContinuousSetWidth(12);
+      analogContinuousSetAtten(ADC_11db);
+      analogContinuous( arr, 
+                        1, 
+                        CONVERSIONS_PER_PIN, 
+                        SAMPLING_FREQ, 
+                        NULL
+                      );
+      analogContinuousStart();
+    }
+
+    void readSensor() {
+      //if(isReading == true) return;
+      //isReading = false;
+
+      if(analogContinuousRead(&result, 0)) {
+        lastAverage = currAverage;
+        currAverage = result->avg_read_mvolts;
+      }
+      
+    }
+
+    void printData() {
+      Serial.printf("%f\n", currAverage);
+    }
+
+    void startTask() {
+      xTaskCreatePinnedToCore(
+        &read_mic_task,                 // Pointer to task function.
+        "read_mic_Task",                // Task name.
+        8192,       // Size of stack allocated to the task (in bytes).
+        this,                           // Pointer to parameters used for task creation.
+        10,  // Task priority level.
+        &read_mic_handle,               // Pointer to task handle.
+        1                               // Core that the task will run on.
+    );
+    }
+      
+};
+
+
+Microphone mic(MIC_OUT);
+
+void setup() {
+  // Initialize serial communication at 115200 bits per second:
+  Serial.begin(115200);
+
+  Serial.println("Init Mic");
+  mic.init();
+  mic.startTask();
+ 
+}
+
+float res;
+void loop() {}
+
+void read_mic_task(void *pvParams) {
+
+  Microphone *mic = static_cast<Microphone *>(pvParams);
+
+  for(;;) {
+
+    // Read mic.
+    mic->readSensor();
+    mic->printData();
+    delay(125);
+  }
+}
+

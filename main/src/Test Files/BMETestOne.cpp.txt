@@ -4,7 +4,6 @@
 #include <Wire.h>
 
 // Internal headers.
-#include "sentryConfigInfo.h"
 #include "Device.h"
 
 // BME Stuff.
@@ -34,14 +33,6 @@ bsec_virtual_sensor_t sensorList[13] = {
     BSEC_OUTPUT_GAS_PERCENTAGE
 };
 
-// Global data storage.
-SensorData outgoingData;
-Alerts outgoingAlerts;
-UserSentryConfig incomingUserConfig;
-UserDriveCommands incomingUserCommands;
-
-// Create Sentry.
-Device sentry(outgoingData, outgoingAlerts, incomingUserConfig, incomingUserCommands);
 
 void setup() {
     Serial.begin(BAUD_RATE);    
@@ -56,14 +47,8 @@ void setup() {
 
 void loop() {
     int64_t time = bme688.getTimeMs();
-    //Serial.printf("--Normal Sentry Operations: %lld\n", time);
     readSensor();
-    //if(time % 60000 < 1000) {
-    //    if(bme_active) Serial.println("--Turning Sensor off.");
-    //    else Serial.println("--Turning sensor on.");
-    //    toggleSensor();
-    //}
-    //vTaskDelay(pdMS_TO_TICKS(5000));
+
 }
 
 void initWire() {

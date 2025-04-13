@@ -6,9 +6,11 @@
 #include <Arduino.h>
 
 #define EE2_TEST_MODE 1     // To override certain function flows for testing purposes.
-#define SERIAL_ONLY_MODE 0  // Mode to deal with things only via the serial terminal and no wi-fi.
+#define SERIAL_ONLY_MODE 1  // Mode to deal with things only via the serial terminal and no wi-fi.
 #define MVMT_ACTIVE 0       // Mode to deal with movement being used.
 #define USE_HPE_DEF_THD 1   // Mode to use default hpe threshold in code, not on esp32 memory.
+#define PRINT_US_ERR 0      // Mode to print the debug outputs of US sensor related things.
+#define PRINT_US_TEST 1
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
@@ -17,6 +19,9 @@
 // Test Wifi. (Covered via BLE communication).
 #define WIFI_SSID "SEEMS"
 #define WIFI_PASSWORD "@Ucf2025"
+
+//#define WIFI_SSID "DIRECT-67-Pixel 6-PdaNet"
+//#define WIFI_PASSWORD "Keurs8ha"
 
 // Test Firebase authentication. (To be covered via BLE Communication).
 #define USER_EMAIL "es849112@ucf.edu"
@@ -30,20 +35,20 @@
     SENSOR PIN DEFINITONS AND DEFAULT THRESHOLD LEVELS
 **********************************************************/
 // Ultrasonic Sensors.
-#define TRIG_F 4           // Front HC-SR04 Trigger Pin.
-#define ECHO_F 5           // Front HC-SR04 Echo Pin.
+#define TRIG_F 4            // Front HC-SR04 Trigger Pin.
+#define ECHO_F 5            // Front HC-SR04 Echo Pin.
 #define DEF_F_OBS_LIM 12    // Front HC-SR04 Obstacle Detection Threshold (in inches).
 
-#define TRIG_B 14           // Back HC-SR04 Trigger Pin.
-#define ECHO_B 13           // Back HC-SR04 Echo Pin.
+#define TRIG_B 40           // Back HC-SR04 Trigger Pin.
+#define ECHO_B 39           // Back HC-SR04 Echo Pin.
 #define DEF_B_OBS_LIM 12    // Back HC-SR04 Obstacle Detection Threshold (in inches).
 
-#define TRIG_L 12           // Left HC-SR04 Trigger Pin.
-#define ECHO_L 11           // Left HC-SR04 Echo Pin.
+#define TRIG_L 7            // Left HC-SR04 Trigger Pin.
+#define ECHO_L 15           // Left HC-SR04 Echo Pin.
 #define DEF_L_OBS_LIM 2     // Left HC-SR04 Obstacle Detection Threshold (in inches).
 
-#define TRIG_R 10           // Right HC-SR04 Trigger Pin.
-#define ECHO_R 9            // Right HC-SR04 Echo Pin.
+#define TRIG_R 42           // Right HC-SR04 Trigger Pin.
+#define ECHO_R 41           // Right HC-SR04 Echo Pin.
 #define DEF_R_OBS_LIM 2     // Right HC-SR04 Obstacle Detection Threshold (in inches).
 
 // BME688 Environmental Sensor.
@@ -61,7 +66,7 @@
 #define L_MOT_PWM1  5       // Left Motor Driver Direction Input Pin.
 #define L_MOT_PWM2  6       // Left Motor Driver PWM Input Pin.
 #define L_MOT_DIAG  7       // Left Motor Driver Fault Output Pin.
-#define L_MOT_OCM   17      // Left Motor Driver Current Sense Output Pin.
+#define L_MOT_OCM   9       // Left Motor Driver Current Sense Output Pin.
 #define R_ENC_A     47      // Right Motor Encoder Output A.
 #define R_ENC_B     48      // Right Motor Encoder Output B.
 #define R_MOT_EN    39      // Right Motor Driver Enable Input Pin.
@@ -75,12 +80,11 @@
 **********************************************************/
 #define DEF_AQI_LIM 151     // Default Air Quality Threshold (in AQI scale).
 #define DEF_NOISE_LIM 80    // Default Noise Level Threshold (in dB).
-#define DEF_TEMP_LIM 100    // Default Temperature Level Trheshold (in degrees C).
-#define DEF_HUM_LIM 90      // Default Humidity Level Threshold (in relative humidity %).
-#define DEF_PRES_LIM 1200   // Default Pressure Level Threshold (in hPa).
-#define DEF_HP_EST_LIM 36  // Default Human Presence Estimation Threshold (in inches).
+#define DEF_TEMP_LIM 30     // Default Temperature Level Trheshold (in degrees C).
+#define DEF_HUM_LIM 60      // Default Humidity Level Threshold (in relative humidity %).
+#define DEF_PRES_LIM 1015   // Default Pressure Level Threshold (in hPa).
+#define DEF_HP_EST_LIM 96   // Default Human Presence Estimation Threshold (in inches).
 //#define DEF_CO2_LIM 2500    // Default CO2 Level Threshold (in ppm).
-//#define DEF_VOC_LIM 20      // Default bVOC Level Threshold (in ppm).
 
 #define MAX_AQI 500
 #define MIN_AQI 50
@@ -131,10 +135,9 @@
 #define PRESSURE_DATA_KEY "pressure"
 #define TMP_DATA_KEY "temperature"
 #define DB_SPL_DATA_KEY "noise"
-#define VOC_DATA_KEY "bvoc"
 #define CO2_DATA_KEY "co2"
 
-#define THD_ALERT 0xFF          // Defualt return value of threshold checking methods.
+#define THD_ALERT 0xFF          // Default return value of threshold checking methods.
 
 typedef float SensorReading;    // Represents sensor values. Data should never require more than 16-bits.
 typedef bool Status;            // Represents alert status as a boolean.
@@ -149,7 +152,6 @@ struct _sensorData {
     SensorReading humidityLevel;
     SensorReading pressureLevel;
     SensorReading noiseLevel;
-    SensorReading bVOClevel;
     SensorReading CO2Level;
 };
 
@@ -160,16 +162,19 @@ struct _alertData {
     Status temperatureStatus;
     Status humidityStatus;
     Status pressureStatus;
-    Status bVOCStatus;
     Status co2Status;
-    Status noiseStatus;
-    Status motion;
+    uint8_t noiseStatus;
+    uint8_t motion;
 };
+
+#define F_HPE_LSB 6
+#define B_HPE_LSB 4
+#define L_HPE_LSB 2
+#define R_HPE_LSB 0
 
 #define AQI_BREACHED_MASK           0x01
 #define CO2_BREACHED_MASK           0x02
 #define PRESSURE_BREACHED_MASK      0x04
-#define VOC_BREACHED_MASK           0x08
 #define TEMPERATURE_BREACHED_MASK   0x10
 #define HUMIDITY_BREACHED_MASK      0x20
 
@@ -205,7 +210,6 @@ struct _userSentryConfig {
     SensorReading userHumidityLevelThreshold;
     SensorReading userPressureLevelThreshold;
     SensorReading userCO2LevelThreshold;
-    SensorReading userVOCLevelThreshold;
     SensorReading userNoiseLevelThreshold;
     SensorReading userPresenceEstimationThreshold;
 };
@@ -299,13 +303,20 @@ enum class BLETransmitCode : unsigned short {
 /*********************************************************
                     Tasks Handles and Materials
 **********************************************************/
+extern portMUX_TYPE preferencesMutex;
+
 extern SemaphoreHandle_t user_config_mutex;    
+extern SemaphoreHandle_t alert_buffer_mutex;    
+extern SemaphoreHandle_t bme_data_mutex;
+extern SemaphoreHandle_t mic_data_mutex;
+extern SemaphoreHandle_t firebase_app_mutex;    // Semaphore Handle for mutex gaurding access to Firebase app for Transmission.
+extern SemaphoreHandle_t adc_read_mutex;
+
 extern TaskHandle_t update_thresholds_handle;   // Task Handle for updating the sensor thresholds to user specifications.
 extern TaskHandle_t poll_US_handle;             // Task handle for polling the ultrasonic sensors.
 extern TaskHandle_t poll_mic_handle;            // Task handle for polling the microphone's analog output.
 extern TaskHandle_t poll_bme_handle;            // Task handle for polling the BME688.
 
-extern SemaphoreHandle_t firebase_app_mutex;    // Semaphore Handle for mutex gaurding access to Firebase app for Transmission.
 extern TaskHandle_t tx_bme_data_handle;         // Task handle to transmit sentry BME688 readings to firebase.
 extern TaskHandle_t tx_mic_data_handle;         // Task handle to transmit sentry Mic readings to firebase.
 extern TaskHandle_t tx_alerts_handle;           // Task handle to transmit sentry alert data to firebase.
@@ -319,12 +330,12 @@ extern TaskHandle_t monitor_diag_handle;        // Task handle to read the diagn
 
 // Size of the stack allocated on the heap to a task (in bytes).
 enum TaskStackDepth {
+    tsd_MAX = 16384,        // Maximum size given to a task.
     tsd_POLL = 6000,        // Size given to tasks who read sensors.
     tsd_SET = 5000,         // Size given to tasks who simply set values.
     tsd_TRANSMIT = 6000,    // Size given to tasks who transmit information to firebase.
     tsd_RECEIVE = 8000,     // Size given to tasks who receive information from firebase.
-    tsd_DRIVE = 10000,      // Size given to tasks who drive the Sentry's Locomotion.
-    tsd_MAX = 16384         // Maximum size given to a task.
+    tsd_DRIVE = 10000       // Size given to tasks who drive the Sentry's Locomotion.
 };
 
 // Priority level of a task.
@@ -344,7 +355,16 @@ const NotificationValue OBSTACLE_THRESHOLD_BREACHED = 0x0001;   // Mask represen
 const NotificationValue PRESENCE_THRESHOLD_BREACHED = 0x0002;   // Mask representing that the Presence Detection Threshold of an HCSR04 Sensor has been passed.
 const NotificationValue MIC_DATA_READY = 0x0001;                // Mask representing that the microphone was just read and its data is ready to be transmitted.
 const NotificationValue BME_DATA_READY = 0x0002;                // Mask representing that the BME688 was just read and its data is ready to be transmitted.
-const NotificationValue US_READY = 0x0003;              
+const NotificationValue US_READY = 0x0003;     
+
+#define PRESENCE_BREACH_STRENGTH_MASK 0x1C  // Mask for Looking at HPE Thresholds.
+#define STRONG_PRESENCE_BREACH 0x10         // Mask for when HPE breach is strong.
+#define MODERATE_PRESENCE_BREACH 0x08       // Mask for when HPE breach is moderate.
+#define WEAK_PRESENCE_BREACH 0x04           // Mask for when HPE breach is weak.
+
+#define STRONG_DB_BREACH 3      // Value indicating the dB breach is strong relative to the set threshold.
+#define MODERATE_DB_BREACH 2    // Value indicating the dB breach is moderate relative to the set threshold.
+#define WEAK_DB_BREACH 1        // Value indicating the dB breach is weak relative to the set threshold.
 
 /*********************************************************
                 Sentry Operation States
@@ -412,11 +432,10 @@ using ThresholdState = _sensor_threshold_states;
 #define PREF_IAQ_THD "IAQ_THD"          // IAQ threshold key.
 #define PREF_CO2_THD "CO2_THD"          // CO2 threshold key.
 #define PREF_PRES_THD "PRS_THD"         // Pressure threshold key.
-#define PREF_VOC_THD "VOC_THD"          // VOC threshold key.
 #define PREF_TEMP_THD "TMP_THD"         // Temperature threshold key.
 #define PREF_HUM_THD "HUM_THD"          // Humidity threshold key.
 #define PREF_SPL_THD "SPL_THD"          // DeciBel SPL threshold key.
 #define PREF_HPE_THD "HPE_THD"          // Human Presence Estismation threshold key.
 
 // End include gaurd.
-#endif /*sentryConfigInfo.h*/
+#endif /* sentryConfigInfo.h */

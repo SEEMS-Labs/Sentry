@@ -21,7 +21,7 @@ class SensorManager;
  * Class that represents the BME688 Environmental Sensor Module 
  * that serves as the core internal monitoring sensor of the Sentry.
  * Several Virtual Sensor's are available for measuring different
- * parameters. Currently only 6 are enabled: AQI, CO2, bVOC, Pressure,
+ * parameters. Currently only 5 are enabled: AQI, CO2, Pressure,
  * Temperature, and Humidity. 
  */
 class BME688 : public SensorInterface {
@@ -55,13 +55,19 @@ class BME688 : public SensorInterface {
         /**
          * Number of metrics measured by the BME688.
          */
-        static constexpr uint8_t numSensors = 6;   
+        static constexpr uint8_t numSensors = 5;   
         
         /**
-         * Size of sensor past reading buffers.
-         * 20 samples/min*1 min => 1 min of samples.
+         * Flag indicating if the sensors buffers are filled with valid values.
+         * Used to ignore the first <bufferSize> samples (minute of operation).
          */
-        static constexpr int bufferSize = 20;  
+        bool sensorWarmedUp = false;
+
+        /**
+         * Size of sensor past reading buffers.
+         * The sensor takes 3s to read so 3*buffersize = response time (s).
+         */
+        static constexpr int bufferSize = 5;  
 
         /**
          * Current virtual sensor that this Sensor is working with for data purposes.
@@ -82,10 +88,6 @@ class BME688 : public SensorInterface {
         float pastPressure[bufferSize];         // Pressure history buffer.
         float pressureThreshold = DEF_PRES_LIM; // Pressure threshold.
 
-        int vocIndex = 0;                   // VOC history buffer index.
-        float pastVOC[bufferSize];          // VOC history buffer.
-        //float vocThreshold = DEF_VOC_LIM;   // VOC threshold.
-
         int tempIndex = 0;                  // Temperature history buffer index.
         float pastTemp[bufferSize];         // Temperature history buffer.
         float tempThreshold = DEF_TEMP_LIM; // Temperature threshold.
@@ -101,7 +103,6 @@ class BME688 : public SensorInterface {
             BSEC_OUTPUT_IAQ,
             BSEC_OUTPUT_CO2_EQUIVALENT,
             BSEC_OUTPUT_RAW_PRESSURE,
-            BSEC_OUTPUT_BREATH_VOC_EQUIVALENT,
             BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_TEMPERATURE,
             BSEC_OUTPUT_SENSOR_HEAT_COMPENSATED_HUMIDITY
         };
@@ -125,24 +126,30 @@ class BME688 : public SensorInterface {
         /**
          * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
          */
-        void init();
+        void init() override;
 
         /**
          * Poll the sensor and store the data.
          * @param xMaxBlockTime The maximum time allotted to read a sensor.
          * @return True if the reading was successful, false otherwise.
          */
-        bool readSensor(TickType_t xMaxBlockTime);
+        bool readSensor(TickType_t xMaxBlockTime) override;
 
         /**
          * Mark a sensor as relevant for output collection.
          */
-        void enable();
+        void enable() override;
 
         /**
          * Mark a sensor as irrelevant for output collection.
          */
-        void disable();
+        void disable() override;
+
+        /**
+         * Check if this sensor is active or not.
+         * @return True if sensor is active, false otherwise.
+         */
+        bool isActive() override;
 
         /**
          * Set the thresholds of this BME688 from memory.
@@ -161,13 +168,13 @@ class BME688 : public SensorInterface {
          * Bit 4: Temperature,
          * Bit 5: Humidity
          */
-        char passedThreshold();
+        char passedThreshold() override;
 
         /**
          * Take the avarage of a buffer that holds past sensor data.
          * @return The average value of a buffer which stores recent past sensor data.
          */
-        float averageBuffer();
+        float averageBuffer() override;
 
         /**
          * Checks the BME status.
@@ -192,12 +199,6 @@ class BME688 : public SensorInterface {
          * @return The last known pressure reading.
          */
         float get_pressure_reading();
-
-        /**
-         * Get the last VOC reading.
-         * @return The last known VOC reading.
-         */
-        float get_VOC_reading();
 
         /**
          * Get the last Temperature reading.

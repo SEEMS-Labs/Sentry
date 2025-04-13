@@ -19,7 +19,7 @@ class SensorInterface {
          * Poll the sensor and store the data. This must be called from a task.
          * @param xMaxBlockTime The maximum total time a sensor reading should be attempted before timeout.
          */
-        virtual bool readSensor(TickType_t xMaxBlockTime) = 0;
+        virtual bool readSensor(TickType_t xMaxBlockTime = 0) = 0;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -31,6 +31,12 @@ class SensorInterface {
          */
         virtual void disable() = 0;
 
+        /**
+         * Check if this sensor is active or not.
+         * @return True if sensor is active, false otherwise.
+         */
+        virtual bool isActive() = 0;
+        
         /**
          * Signal that a sensor has passed its threshold(s).
          * @return A byte where each bit set to 1 represents a sensor threshold that has been passed

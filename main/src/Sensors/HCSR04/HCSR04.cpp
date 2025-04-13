@@ -25,10 +25,14 @@ bool HCSR04::readSensor(TickType_t xMaxBlockTime) {
     
     // Wait for pulse to complete.
     uint32_t pulseFinishedEvent = ulTaskNotifyTake(pdTRUE, xMaxBlockTime);
-
-    // Compute distance and store.
     if(pulseFinishedEvent != 0) {
+        // Compute distance just measured.
         float inches = computeInches();
+
+        // Store the last average for later comparisons.
+        lastBufferAverage = averageBuffer();
+
+        // Update the buffer.
         if(distIndex == bufferSize) distIndex = 0;
         pastDistances[distIndex++] = inches;
         res = true;
@@ -83,6 +87,7 @@ void HCSR04::setHpeThresholdFromPreferences(Preferences preferences) {
     Serial.println("Checking if Custom HCSR04 HPE Thresholds Exist.");
     
     // Create preferences namespace in read mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_SENSOR_THDS, true);
     
     // Check for intial exisitence of bme thresholds (if this doesn't exist, this is the first Sentry init).
@@ -98,6 +103,7 @@ void HCSR04::setHpeThresholdFromPreferences(Preferences preferences) {
     
     // End the preferences namespace and return.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
 }
 
 /**
@@ -107,6 +113,7 @@ void HCSR04::setHpeThresholdFromPreferences(Preferences preferences) {
  * @param preferences Access to Sentry NVM (permanent memory).
  */
 void HCSR04::setHpeThresholdAndUpdatePreferences(Preferences preferences) {
+
     // Grab the new threshold.
     float newLimit = sensorManager->getUserSentryConfigDataPacket()->userPresenceEstimationThreshold;
     Serial.printf("US Threshold [%f -> %f]\n", presenceDetectionThreshold, newLimit);
@@ -114,31 +121,70 @@ void HCSR04::setHpeThresholdAndUpdatePreferences(Preferences preferences) {
     // Check to see if update should be made.
     bool limitChanged = (presenceDetectionThreshold != newLimit);
     bool newLimitInBounds = (newLimit <= MAX_HPE) && (newLimit >= MIN_HPE);
-
+    
     // Set the new HPE limit if required.
     if(limitChanged && newLimitInBounds) {
+        Serial.printf("US Temp threshold change accepted.\n");
         presenceDetectionThreshold = newLimit;
+        taskENTER_CRITICAL(&preferencesMutex);
         preferences.begin(PREF_SENSOR_THDS, false);
         preferences.putFloat(PREF_HPE_THD, newLimit);
         preferences.end();
+        taskEXIT_CRITICAL(&preferencesMutex);
     }
     
 }
 
 /**
  * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.
- * @return A byte where the Bit 0 (LSB) represents ths obstacle detection threshold 
- * and Bit 1 represents the presence detection threshold. A bit set to 1 indicates 
- * the distance threshold has been breached and a bit set to 0 indicates the opposite.
+ * @return A byte where the least two significant bits represent detection threshold
+ * breaches and the next 3 represent the strength of the breach.
+ * Bit 0: Obstacle detection,
+ * Bit 1: Human presence estimation,
+ * Bit 2: Strong breach (certain that the barrier has been broken).
+ * Bit 3: Moderate breach.
+ * Bit 4: Weak breach.
  */
 char HCSR04::passedThreshold() {
-    // Grab the last measured distance.
     char flag = 0x00;
-    if(this->active) {
-        float distance = pastDistances[distIndex - 1];
-        if(distance <= obstacleDetectionThreshold) flag |= OBSTACLE_THRESHOLD_BREACHED;
-        if(distance <= presenceDetectionThreshold) flag |= PRESENCE_THRESHOLD_BREACHED;
+
+    // Only check thresholds if sensor is active.
+    if(this->active == false) return flag;
+
+    // Check obstacle detection threshold. (This is checked against most recent distance instead of the buffers).
+    if(getDistanceReading() <= obstacleDetectionThreshold) flag |= OBSTACLE_THRESHOLD_BREACHED;
+
+    // Check human presence estimation threshold.
+    float currBufferAvg = averageBuffer();
+    float HpeCheck = presenceDetectionThreshold/currBufferAvg - 1;
+    if(HpeCheck >= HPE_PERCENT_DIFF/100.0) {
+        // Set the bit indicating human presence was detected.
+        flag |= PRESENCE_THRESHOLD_BREACHED;
+
+        // Check the difference between current and last buffer averages to determine the strength/confidence of presence.
+        float bufferPercentDiff = abs(currBufferAvg - lastBufferAverage)/lastBufferAverage;
+
+        // Greater than a 10% difference between buffers while presence is detected strongly indicates presence (and motion within boundary).
+        if(bufferPercentDiff > HPE_STRONG_PERCENT/100.0) {
+            flag |= STRONG_PRESENCE_BREACH;
+            //Serial.printf("😁diff: %f->Strong Presence Detected->Flag = 0x%x\n", bufferPercentDiff, flag);
+        }
+
+        // Less than a 5% difference between buffers while presence is detected weakly indicates presence (and motion within boundary).
+        else if(bufferPercentDiff < HPE_WEAK_PERCENT/100.0) {
+            flag |= WEAK_PRESENCE_BREACH;
+            //Serial.printf("😁diff: %f->Weak Presence Detected->Flag = 0x%x\n", bufferPercentDiff, flag);
+        }
+
+        // In between a 5-10% difference between buffers while presence is detected moderately indicates presence (and motion within boundary).
+        else {
+            flag |= MODERATE_PRESENCE_BREACH;
+            //Serial.printf("😁diff: %f->Moderate Presence Detected->Flag = 0x%x\n", bufferPercentDiff, flag);
+        }
+        
     }
+
+    // Return.
     return flag;
 }
 
@@ -147,9 +193,9 @@ char HCSR04::passedThreshold() {
  * @return The average value of this sensors past distances.
  */
 float HCSR04::averageBuffer() {
-    float average = 0;
-    for(int i = 0; i < bufferSize; i++) average += pastDistances[i];
-    return average/bufferSize;
+    float sum = 0;
+    for(int i = 0; i < bufferSize; i++) sum += pastDistances[i];
+    return sum/bufferSize;
 }
 
 /**
@@ -221,3 +267,5 @@ float HCSR04::getDistanceReading() {
     else res = pastDistances[bufferSize - 1]; // Index should get the last element in the buffer.
     return res;
 }
+
+float HCSR04::getLastBufferAverage() { return lastBufferAverage; }

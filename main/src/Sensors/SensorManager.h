@@ -12,6 +12,7 @@
 
 #pragma once
 #include "BME688/BME688.h"
+
 #include <Preferences.h>
 
 // Forward definition of Sensors.
@@ -53,6 +54,10 @@ void IRAM_ATTR on_back_us_echo_changed(void *arg);   // ISR that deals with timi
 void IRAM_ATTR on_left_us_echo_changed(void *arg);   // ISR that deals with timing of left ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
 void IRAM_ATTR on_right_us_echo_changed(void *arg);  // ISR that deals with timing of right ultrasonic sensor's trigger pulse. Arg is a ref to sensor in question.
 
+#define HPE_TIMEOUT 5000    // Time for HPE to remain undetected after having been detected before clearing the detected field.
+#define MIC_TIMEOUT 3000    // Time for Mic to remain undetected after having been detected before clearing the detected field.
+uint8_t decodeHpeThreshold(char breachField);
+
 /**
  * Class designed to manage Sentry sensors and sensor tasks.
  */
@@ -66,6 +71,7 @@ class SensorManager {
         SensorData *environmentalData;      // Pointer to Packet of important environmental sensor readings for SentryLink.
         StateManager *stateManager;         // Pointer to the Sentry's State Manager.
         Preferences preferences;            // Access to the Sentry's Permanent Memory.
+
         void constructAllSensors();
 
     public:
@@ -78,9 +84,7 @@ class SensorManager {
             environmentalData(envData),
             userConfig(userConfig),
             obstacleInfo(obstacleInfo)
-        {
-            constructAllSensors();
-        };
+        { constructAllSensors(); }
 
         void initAllSensors();          // Initialize all 6 sensors of the Sentry.
         void attachAllInterrupts();     // Attach all sensor based interrupts of the Sentry.

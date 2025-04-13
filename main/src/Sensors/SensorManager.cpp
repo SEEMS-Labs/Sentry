@@ -51,36 +51,65 @@ void poll_US_task(void *pvSensorManager) {
     Alerts *alertInfoPacket = manager->getAlertsPacket();
 
     // Create reading success monitoring variables.
-    bool frontGood, backGood, leftGood, rightGood;
+    bool readingGood[4];
 
-    // Create threshold monitoring variables
-    char frontBreached, backBreached, leftBreached, rightBreached;
-    bool breachDetected;
+    // Create threshold monitoring variables.
+    char currSensorBreached[4], lastSensorBreached[4];
+    bool obsBreachDetected = false;
+    bool hpeChangeDetected = false;
     
+    // Initialize variables for proper resetting of fields in firebase (if needed).
+    for(int i = 0; i < 4; i++) {
+        readingGood[i] = false;
+        currSensorBreached[i] = 0x00;
+        lastSensorBreached[i] = 0xFF;
+    }
+
     // Begin task loop.
     for(;;) {
-        //Serial.println("Begin Reading Ultrasonic Sensors");
+        if(PRINT_US_ERR) Serial.println("Begin Reading Ultrasonic Sensors");
         
         // Read all 4 sensors on the specified order. At most ~40 ms to read 1 -> ~160ms to read all 4.
-        frontGood = frontSensor->readSensor(US_READ_TIME);
-        backGood = backSensor->readSensor(US_READ_TIME);
-        leftGood = leftSensor->readSensor(US_READ_TIME);
-        rightGood = rightSensor->readSensor(US_READ_TIME);
+        readingGood[F_US_ID] = frontSensor->readSensor(US_READ_TIME);
+        readingGood[B_US_ID] = backSensor->readSensor(US_READ_TIME);
+        readingGood[L_US_ID] = leftSensor->readSensor(US_READ_TIME);
+        readingGood[R_US_ID] = rightSensor->readSensor(US_READ_TIME);
 
-        //Serial.printf("FrontGood: %d, BackGood: %d, LeftGood: %d, RightGood: %d\n", frontGood, backGood, leftGood, rightGood);
-
-        /*
-        if(frontSensor->isActive()) Serial.printf("Front: %.2f in.\n", frontSensor->getDistanceReading());
-        if(backSensor->isActive()) Serial.printf("Back: %.2f in.\n", frontSensor->getDistanceReading());
-        if(leftSensor->isActive()) Serial.printf("Left: %.2f in.\n", frontSensor->getDistanceReading());
-        if(rightSensor->isActive()) Serial.printf("Right: %.2f in.\n", frontSensor->getDistanceReading());
-        */
-
+        if(PRINT_US_TEST) {
+            Serial.println("---------------------------------------------------------");
+            if(frontSensor->isActive() && readingGood[F_US_ID]) {
+                Serial.printf("Front\t Current reading: %.2f, LBA: %f, CBA:%f\n", 
+                    frontSensor->getDistanceReading(), 
+                    frontSensor->getLastBufferAverage(), 
+                    frontSensor->averageBuffer());
+            }
+            /*
+            if(backSensor->isActive() && readingGood[B_US_ID]) {
+                Serial.printf("Back\t Current reading: %.2f, LBA: %f, CBA:%f\n", 
+                    backSensor->getDistanceReading(), 
+                    backSensor->getLastBufferAverage(), 
+                    backSensor->averageBuffer());
+            }
+            if(leftSensor->isActive() && readingGood[L_US_ID]) {
+                Serial.printf("Left\t Current reading: %.2f, LBA: %f, CBA:%f\n", 
+                    leftSensor->getDistanceReading(), 
+                    leftSensor->getLastBufferAverage(), 
+                    leftSensor->averageBuffer());
+            }
+            if(rightSensor->isActive() && readingGood[R_US_ID]) {
+            Serial.printf("Right\t Current reading: %.2f, LBA: %f, CBA:%f\n", 
+                rightSensor->getDistanceReading(), 
+                rightSensor->getLastBufferAverage(), 
+                rightSensor->averageBuffer());
+            }
+            */
+        }
+    
         // Get thresholds breached for each sensor.
-        frontBreached = frontSensor->passedThreshold();
-        backBreached = backSensor->passedThreshold();
-        leftBreached = leftSensor->passedThreshold();
-        rightBreached = rightSensor->passedThreshold();
+        currSensorBreached[F_US_ID] = (frontSensor->isActive()) ? frontSensor->passedThreshold() : 0x00;
+        currSensorBreached[B_US_ID] = (backSensor->isActive()) ? backSensor->passedThreshold(): 0x00;
+        currSensorBreached[L_US_ID] = (leftSensor->isActive()) ? leftSensor->passedThreshold() : 0x00;
+        currSensorBreached[R_US_ID] = (rightSensor->isActive()) ? rightSensor->passedThreshold() : 0x00;
         
         // Determine threshold breaches to act on based on movement mode.
         MovementState currMvmtState = StateManager::getManager()->getSentryMovementState();
@@ -88,48 +117,91 @@ void poll_US_task(void *pvSensorManager) {
         // Deal with Sentinel Mode (aka Idle movement mode). Ultrasonics used for human presence estimation.
         if(currMvmtState == MovementState::ms_IDLE) {
             // Get human presence threshold breached flag for each sensor.
-            frontBreached &= PRESENCE_THRESHOLD_BREACHED;
-            backBreached &= PRESENCE_THRESHOLD_BREACHED;
-            leftBreached &= PRESENCE_THRESHOLD_BREACHED;
-            rightBreached &= PRESENCE_THRESHOLD_BREACHED;
+            currSensorBreached[F_US_ID] &= (PRESENCE_BREACH_STRENGTH_MASK | PRESENCE_THRESHOLD_BREACHED);
+            currSensorBreached[B_US_ID] &= (PRESENCE_BREACH_STRENGTH_MASK | PRESENCE_THRESHOLD_BREACHED);
+            currSensorBreached[L_US_ID] &= (PRESENCE_BREACH_STRENGTH_MASK | PRESENCE_THRESHOLD_BREACHED);
+            currSensorBreached[R_US_ID] &= (PRESENCE_BREACH_STRENGTH_MASK | PRESENCE_THRESHOLD_BREACHED);
 
-            // Update alerts packet if needed.
-            breachDetected = frontBreached || backBreached || leftBreached || rightBreached;
-            alertInfoPacket->motion = (breachDetected) ? UNSAFE : SAFE;
+            // Update alerts packet and Notify if needed.
+            hpeChangeDetected = (currSensorBreached[F_US_ID] != lastSensorBreached[F_US_ID]) || 
+                                (currSensorBreached[B_US_ID] != lastSensorBreached[B_US_ID]) || 
+                                (currSensorBreached[L_US_ID] != lastSensorBreached[L_US_ID]) || 
+                                (currSensorBreached[R_US_ID] != lastSensorBreached[R_US_ID]);
 
-            // Notify alert transmission task. 
-            if(breachDetected) {
-                Serial.println("✨Presence Detected, Finna Transmit.");
-                if(frontBreached) Serial.printf("Front: %.2f in. < %.2f in.\n", frontSensor->getDistanceReading(), frontSensor->getHpeThreshold());
-                if(backBreached) Serial.printf("Back: %.2f in. < %.2f in.\n", backSensor->getDistanceReading(), backSensor->getHpeThreshold());
-                if(leftBreached) Serial.printf("Left: %.2f in. < %.2f in.\n", leftSensor->getDistanceReading(), leftSensor->getHpeThreshold());
-                if(rightBreached) Serial.printf("Right: %.2f in. < %.2f in.\n", rightSensor->getDistanceReading(), rightSensor->getHpeThreshold());
-                xTaskNotify(tx_alerts_handle, PRESENCE_THRESHOLD_BREACHED, eSetBits);
+            if(hpeChangeDetected) {
+
+                if(PRINT_US_ERR) {
+                    if(frontSensor->isActive() && readingGood[F_US_ID]) Serial.printf("👋 FrontBreached: curr->0x%x, last->0x%x\n", currSensorBreached[F_US_ID], lastSensorBreached[F_US_ID]);
+                    if(backSensor->isActive() && readingGood[B_US_ID]) Serial.printf("👋 BackBreached: curr->0x%x, last->0x%x\n", currSensorBreached[B_US_ID], lastSensorBreached[B_US_ID]);
+                    if(leftSensor->isActive() && readingGood[L_US_ID]) Serial.printf("👋 LeftBreached: curr->0x%x, last->0x%x\n", currSensorBreached[L_US_ID], lastSensorBreached[L_US_ID]);
+                    if(rightSensor->isActive() && readingGood[R_US_ID]) Serial.printf("👋 RightBreached: curr->0x%x, last->0x%x\n", currSensorBreached[R_US_ID], lastSensorBreached[R_US_ID]);
+                }
+
+                // Keep track of sensor breach history.
+                lastSensorBreached[F_US_ID] = currSensorBreached[F_US_ID];
+                lastSensorBreached[B_US_ID] = currSensorBreached[B_US_ID];
+                lastSensorBreached[L_US_ID] = currSensorBreached[L_US_ID];
+                lastSensorBreached[R_US_ID] = currSensorBreached[R_US_ID];
+
+                // Set the relevant field in the alerts package.
+                uint8_t r_pd_strength = (rightSensor->isActive()) ? decodeHpeThreshold(currSensorBreached[R_US_ID]) : 0;
+                uint8_t l_pd_strength = (leftSensor->isActive()) ? decodeHpeThreshold(currSensorBreached[L_US_ID]) : 0;
+                uint8_t b_pd_strength = (backSensor->isActive()) ? decodeHpeThreshold(currSensorBreached[B_US_ID]) : 0;
+                uint8_t f_pd_strength = (frontSensor->isActive()) ? decodeHpeThreshold(currSensorBreached[F_US_ID]) : 0;
+                if(xSemaphoreTake(alert_buffer_mutex, portMAX_DELAY) == pdTRUE) {
+                    alertInfoPacket->motion =   (r_pd_strength << R_HPE_LSB) | 
+                                                (l_pd_strength << L_HPE_LSB) | 
+                                                (b_pd_strength << B_HPE_LSB) | 
+                                                (f_pd_strength << F_HPE_LSB);
+                    xSemaphoreGive(alert_buffer_mutex);
+                }
+                if(PRINT_US_TEST) Serial.printf("\t\t[Strength: 0x%x]Front: %.2f in. < %.2f in.\n", f_pd_strength, frontSensor->getDistanceReading(), frontSensor->getHpeThreshold());
+                
+                if(PRINT_US_ERR) {
+                    if(hpeChangeDetected) Serial.printf("\t✨Change in Presence Detected: AlertPacket: (0x%x). DecodedFront: 0x%x\n", alertInfoPacket->motion, f_pd_strength);
+                    if(currSensorBreached[F_US_ID]) Serial.printf("\t\tFront: %.2f in. < %.2f in.\n", frontSensor->getDistanceReading(), frontSensor->getHpeThreshold());
+                    if(currSensorBreached[B_US_ID]) Serial.printf("\t\tBack: %.2f in. < %.2f in.\n", backSensor->getDistanceReading(), backSensor->getHpeThreshold());
+                    if(currSensorBreached[L_US_ID]) Serial.printf("\t\tLeft: %.2f in. < %.2f in.\n", leftSensor->getDistanceReading(), leftSensor->getHpeThreshold());
+                    if(currSensorBreached[R_US_ID]) Serial.printf("\t\tRight: %.2f in. < %.2f in.\n", rightSensor->getDistanceReading(), rightSensor->getHpeThreshold());
+                }
+
+                // Notify.
+                if(!SERIAL_ONLY_MODE) 
+                    if(tx_alerts_handle != NULL) xTaskNotify(tx_alerts_handle, -1, eNoAction);
+                    else Serial.println("Failed to notify tx_alerts task. Task likely not initialized.");
             }
         }
 
         // Deal with Sentry Modes (AKA Autonomous and Manual movement modes). Ultrasonics used for obstacle estimation.
         else if(currMvmtState != MovementState::ms_EMERGENCY_STOP) {
             // Get obstacle detection breached flag for each sensor.
-            frontBreached &= OBSTACLE_THRESHOLD_BREACHED;
-            backBreached &= OBSTACLE_THRESHOLD_BREACHED;
-            leftBreached &= OBSTACLE_THRESHOLD_BREACHED;
-            rightBreached &= OBSTACLE_THRESHOLD_BREACHED;            
+            currSensorBreached[F_US_ID] &= OBSTACLE_THRESHOLD_BREACHED;
+            currSensorBreached[B_US_ID] &= OBSTACLE_THRESHOLD_BREACHED;
+            currSensorBreached[L_US_ID] &= OBSTACLE_THRESHOLD_BREACHED;
+            currSensorBreached[R_US_ID] &= OBSTACLE_THRESHOLD_BREACHED;            
 
             // Update Obstacle Detection data packet if needed.
-            breachDetected = frontBreached || backBreached || leftBreached || rightBreached;
-            obsDetectionPacket->frontObstacleDetected = frontBreached;
-            obsDetectionPacket->backObstacleDetected = backBreached;
-            obsDetectionPacket->leftObstacleDetected = leftBreached;
-            obsDetectionPacket->rightObstacleDetected = rightBreached;
+            obsBreachDetected = currSensorBreached[F_US_ID] | 
+                                currSensorBreached[B_US_ID] | 
+                                currSensorBreached[L_US_ID] | 
+                                currSensorBreached[R_US_ID];
+
+            obsDetectionPacket->frontObstacleDetected = currSensorBreached[F_US_ID];
+            obsDetectionPacket->backObstacleDetected = currSensorBreached[B_US_ID];
+            obsDetectionPacket->leftObstacleDetected = currSensorBreached[L_US_ID];
+            obsDetectionPacket->rightObstacleDetected = currSensorBreached[R_US_ID];
 
             // Notify tasks.
-            if(breachDetected) {
+            if(obsBreachDetected) {
                 // Notify random walk task.
-                if(currMvmtState == MovementState::ms_AUTONOMOUS) xTaskNotify(erw_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+                if(currMvmtState == MovementState::ms_AUTONOMOUS) 
+                    if(erw_mvmt_handle != NULL) xTaskNotify(erw_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+                    else Serial.println("Failed to notify erw_mvmt_task. Task likely not initialized.");
 
                 // Notify user controlled movement task.
-                else if(currMvmtState == MovementState::ms_MANUAL) xTaskNotify(user_ctrld_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+                else if(currMvmtState == MovementState::ms_MANUAL) 
+                    if(user_ctrld_mvmt_handle != NULL) xTaskNotify(user_ctrld_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+                    else Serial.println("Failed to notify user_ctrld_mvmt_task. Task likely not initialized.");
             }
         }
 
@@ -137,6 +209,7 @@ void poll_US_task(void *pvSensorManager) {
         else {
             Serial.println("Hmm. How did we get here?");
         }
+        Serial.println("---------------------------------------------------------\n");
 
         // Poll sensors periodically.
         vTaskDelayUntil(&xLastWakeTime, MAX_US_POLL_TIME + 250);
@@ -154,47 +227,45 @@ void poll_mic_task(void *pvSensorManager) {
     SensorData *sensorDataPacket = manager->getEnvironmentalDataPacket();
     Alerts *alertInfoPacket = manager->getAlertsPacket();
 
-    // Take 10 readings before averaging.
-    int count = 0;
+    // Create threhsold monitoring variables.
+    char currMicThresholdBreached = THD_ALERT, lastMicThresholdBreached = THD_ALERT;
+    bool changeDetected = false;
 
     // Main task loop.
     for(;;) {
 
-        bool success = mic->readSensor(-1);
+        bool success = mic->readSensor();
         if(success) {
-            //Serial.printf("Succesful mic poll: %d\n", count);
-            if(count > 10) {
-                //Serial.println("Enough samples. Mic output now!");
-                // Reset counter and take average of readings.
-                count = 0;
-                //float soundLevel = mic->averageBuffer();
-                float soundLevel = mic->getLastSoundLevelReading();
-                //Serial.printf("Data Value: %f\n", soundLevel);
+            // Grab current and last sound buffer averages for comparison.
+            float currAverageSoundLevel = mic->averageBuffer();
+            float lastAverageSoundLevel = mic->getLastAverageSoundLevel();
 
-                // Check to see if alerts ready.
-                //*
-                char thresholdCheck = mic->passedThreshold();
-                if(thresholdCheck == THD_ALERT) {
-                    // Update alerts packet.
-                    alertInfoPacket->noiseStatus = UNSAFE;
-                
-                    // Notify alert transmission task.
-                    xTaskNotify(tx_alerts_handle, -1, eNoAction);
-                } 
-                //*/
+            // Check to see if alerts ready.
+            currMicThresholdBreached = mic->passedThreshold();
+            changeDetected = currMicThresholdBreached != lastMicThresholdBreached;
+            if(changeDetected) {
+                // Update alerts packet and last threshold.
+                lastMicThresholdBreached = currMicThresholdBreached;
+                alertInfoPacket->noiseStatus = (uint8_t) currMicThresholdBreached;
+            
+                // Notify alert transmission task.
+                if(!SERIAL_ONLY_MODE) 
+                    if(tx_alerts_handle != NULL) xTaskNotify(tx_alerts_handle, -1, eNoAction);
+                    else Serial.println("Failed to notify tx_alerts_task. Task likely not initialized.");
+            } 
 
-                // Update data buffer. Notify transmit task.
-                //Serial.printf("DATA PACKET PRE UPDATE: %f\n", sensorDataPacket->noiseLevel);
-                sensorDataPacket->noiseLevel = soundLevel;
-                //Serial.printf("DATA PACKET POST UPDATE: %f\n", sensorDataPacket->noiseLevel);
-                xTaskNotify(tx_mic_data_handle, MIC_DATA_READY, eNoAction);
-            }
-            else count++;
+            // Update data buffer. Notify transmit task.
+            //Serial.printf("DATA PACKET PRE UPDATE: %f\n", sensorDataPacket->noiseLevel);
+            sensorDataPacket->noiseLevel = currAverageSoundLevel;
+            //Serial.printf("DATA PACKET POST UPDATE: %f\n", sensorDataPacket->noiseLevel);
+            if(!SERIAL_ONLY_MODE && tx_mic_data_handle != NULL) xTaskNotify(tx_mic_data_handle, MIC_DATA_READY, eNoAction);
+            else Serial.printf("%u: Sound Level: %f\n", millis(), currAverageSoundLevel);
+            
         }
 
         // Delay.
         //Serial.println("Delaying from pollMic");
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(50));
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(125));
         
     }
 } 
@@ -210,7 +281,12 @@ void poll_bme_task(void *pvSensorManager) {
     SensorData *sensorDataPacket = manager->getEnvironmentalDataPacket();
     Alerts *alertInfoPacket = manager->getAlertsPacket();
 
+    // Create threshold monitoring variables.
+    char currThresholdsBreached = THD_ALERT, lastThresholdsBreached = THD_ALERT;
+    bool changeDetected = false;
+
     // Begin task loop.
+    int count = 0;
     for(;;) {
 
         // Read BME.
@@ -220,61 +296,65 @@ void poll_bme_task(void *pvSensorManager) {
 
         // Grab readings if succesful.
         if(success) {
-            //Serial.println("--Reading was successful.");
+            Serial.printf("--Reading was successful: %d\n", ++count);
 
             // Check to see if alerts ready.
-            char thresholdCheck = bme->passedThreshold();
-            if(thresholdCheck != !THD_ALERT) {
+            currThresholdsBreached = bme->passedThreshold();
+            changeDetected = (currThresholdsBreached != lastThresholdsBreached);
+            if(changeDetected) {
+                // Update last threshold.
+                lastThresholdsBreached = currThresholdsBreached;
+
                 // Update alerts packet.
-                alertInfoPacket->airQualityStatus = (thresholdCheck & AQI_BREACHED_MASK) ? UNSAFE : SAFE;
-                alertInfoPacket->humidityStatus = (thresholdCheck & HUMIDITY_BREACHED_MASK) ? UNSAFE : SAFE;
-                alertInfoPacket->pressureStatus = (thresholdCheck & PRESSURE_BREACHED_MASK) ? UNSAFE : SAFE;
-                alertInfoPacket->temperatureStatus = (thresholdCheck & TEMPERATURE_BREACHED_MASK) ? UNSAFE : SAFE;
-                alertInfoPacket->co2Status = (thresholdCheck & CO2_BREACHED_MASK) ? UNSAFE : SAFE;
-                alertInfoPacket->bVOCStatus = (thresholdCheck & VOC_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->airQualityStatus = (currThresholdsBreached & AQI_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->humidityStatus = (currThresholdsBreached & HUMIDITY_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->pressureStatus = (currThresholdsBreached & PRESSURE_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->temperatureStatus = (currThresholdsBreached & TEMPERATURE_BREACHED_MASK) ? UNSAFE : SAFE;
+                alertInfoPacket->co2Status = (currThresholdsBreached & CO2_BREACHED_MASK) ? UNSAFE : SAFE;
+
+                /*
+                Serial.println("--------------------------");
+                Serial.printf("AQI Breach: %d\n", (currThresholdsBreached & AQI_BREACHED_MASK) ? 1 : 0);
+                Serial.printf("Humidity Breach: %d\n", (currThresholdsBreached & HUMIDITY_BREACHED_MASK) ? 1 : 0);
+                Serial.printf("Pressure Breach: %d\n", (currThresholdsBreached & PRESSURE_BREACHED_MASK) ? 1 : 0);
+                Serial.printf("Temperature Breach: %d\n", (currThresholdsBreached & TEMPERATURE_BREACHED_MASK) ? 1 : 0);
+                Serial.printf("CO2 Breach: %d\n", (currThresholdsBreached & CO2_BREACHED_MASK) ? 1 : 0);
+                Serial.println("--------------------------");
+                //*/
 
                 // Notify alert transmission task.
-                if(!SERIAL_ONLY_MODE) xTaskNotify(tx_alerts_handle, -1, eNoAction);
+                if(!SERIAL_ONLY_MODE)  {
+                    if(tx_alerts_handle != NULL) xTaskNotify(tx_alerts_handle, -1, eNoAction);
+                    else Serial.println("Failed to notify tx_alerts_task. Task likely not initialized.");
+                }
             }
             
-            /*
-            Serial.printf("Besc AQI: %f\n", bme->get_IAQ_reading());
-            Serial.printf("Bsec Humidity: %f\n", bme->get_humidity_reading());
-            Serial.printf("Bsec Pressure: %f\n", bme->get_pressure_reading());
-            Serial.printf("Bsec Temperature: %f\n", bme->get_temp_reading());
-
-            // Preupdate
-            Serial.printf("Preupdate AQI: %f\n", sensorDataPacket->airQualityIndex);
-            Serial.printf("Preupdate Humidity: %f\n", sensorDataPacket->humidityLevel);
-            Serial.printf("Preupdate Pressure: %f\n", sensorDataPacket->pressureLevel);
-            Serial.printf("Preupdate Temperature: %f\n", sensorDataPacket->temperatureLevel);
-            */
-
             // Update data packet.
             sensorDataPacket->airQualityIndex = bme->get_IAQ_reading();
             sensorDataPacket->humidityLevel = bme->get_humidity_reading();
             sensorDataPacket->pressureLevel = bme->get_pressure_reading();
             sensorDataPacket->temperatureLevel = bme->get_temp_reading();
-            sensorDataPacket->bVOClevel = bme->get_VOC_reading();
             sensorDataPacket->CO2Level = bme->get_CO2_reading();
             
             // Preupdate
             /*
-            Serial.printf("Postupdate AQI: %f\n", sensorDataPacket->airQualityIndex);
-            Serial.printf("Postupdate Humidity: %f\n", sensorDataPacket->humidityLevel);
-            Serial.printf("Postupdate Pressure: %f\n", sensorDataPacket->pressureLevel);
-            Serial.printf("Postupdate Temperature: %f\n", sensorDataPacket->temperatureLevel);
-            */
+            Serial.printf("AQI: %.2f\n", sensorDataPacket->airQualityIndex);
+            Serial.printf("Humidity: %.2f\n", sensorDataPacket->humidityLevel);
+            Serial.printf("Pressure: %.2f\n", sensorDataPacket->pressureLevel);
+            Serial.printf("Temperature: %.2f\n\n", sensorDataPacket->temperatureLevel);
+            //*/
 
             // Notify general data transmission task.
             //Serial.printf("--Notifying TX_BME_DATA_TASK\n");
-            if(!SERIAL_ONLY_MODE) xTaskNotify(tx_bme_data_handle, BME_DATA_READY, eNoAction);
+            if(!SERIAL_ONLY_MODE) {
+                if(tx_bme_data_handle != NULL) xTaskNotify(tx_bme_data_handle, BME_DATA_READY, eNoAction);
+                else Serial.println("Failed to notify tx_bme_data_task. Task likely not initialized.");
+            }
         }
         else Serial.printf("--Reading was unsuccessful. You're cooked. BME Active: %d\n", bme->checkSensorStatus());
 
         // Poll BME periodically.
         vTaskDelayUntil(&xLastWakeTime, MAX_BME_POLL_TIME);
-        
     }
 }   
 
@@ -329,6 +409,26 @@ void on_right_us_echo_changed(void *arg) {
         portYIELD_FROM_ISR(higherPriorityWasAwoken);
     }
 }
+
+uint8_t decodeHpeThreshold(char breachField) {
+    uint8_t res = 0;
+    switch(breachField >> 2) {
+        case (STRONG_PRESENCE_BREACH >> 2) :
+            res = 3;
+            break;
+        case (MODERATE_PRESENCE_BREACH >> 2) :
+            res = 2;
+            break;
+        case (WEAK_PRESENCE_BREACH >> 2) :
+            res = 1;
+            break;
+        default:
+            res = 0;
+            break;
+    }
+    return res;
+}
+
 
 /**
  * Initialize the 4 US sensors, Mic, and BME.
@@ -454,12 +554,12 @@ UserSentryConfig *SensorManager::getUserSentryConfigDataPacket() {
 }
 
 void SensorManager::updateSensorThresholds() {
-    frontUS->setHpeThreshold(preferences);
-    backUS->setHpeThreshold(preferences);
-    leftUS->setHpeThreshold(preferences);
-    rightUS->setHpeThreshold(preferences);
-    mic->setThreshold(preferences);
-    bme688->setThresholds(preferences);
+    if(frontUS->isActive()) frontUS->setHpeThreshold(preferences);
+    if(backUS->isActive()) backUS->setHpeThreshold(preferences);
+    if(leftUS->isActive()) leftUS->setHpeThreshold(preferences);
+    if(rightUS->isActive()) rightUS->setHpeThreshold(preferences);
+    if(mic->isActive()) mic->setThreshold(preferences);
+    if(bme688->isActive()) bme688->setThresholds(preferences);
 }
 
 // Create the task to poll the 4 ultrasonic sensors.
@@ -515,12 +615,13 @@ BaseType_t SensorManager::beginUpdateThresholdTask() {
         "update_sensor_thresholds_task",    // Task name.
         TaskStackDepth::tsd_SET,            // Size of stack allocated to the task (in bytes).
         this,                               // Pointer to parameters used for task creation.
-        TaskPriorityLevel::tpl_MEDIUM_LOW,  // Task priority level.
+        TaskPriorityLevel::tpl_HIGH,        // Task priority level.
         &update_thresholds_handle,          // Pointer to task handle.
         1                                   // Core that the task will run on.
     );
     return res;
 }
+
 void SensorManager::constructAllSensors() {
     frontUS = new HCSR04(TRIG_F, ECHO_F, F_US_ID, DEF_F_OBS_LIM, this);
     backUS = new HCSR04(TRIG_B, ECHO_B, B_US_ID, DEF_B_OBS_LIM, this);

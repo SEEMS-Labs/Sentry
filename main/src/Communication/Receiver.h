@@ -32,8 +32,8 @@ class Receiver : public BLEServerCallbacks, public BLECharacteristicCallbacks {
         String bleDataBuffer = "";                  // Buffer of data received from BLE client.
 
         // Firebase Reception material.
-        String lastReadData = "";
-        String lastReadId = "";
+        String lastReadPayload = "emptyPayload";
+        String lastReadId = "emptyId";
         bool checkForRepeatedResult(AsyncResult res);
         void receiveSentryLinkStream(AsyncResult &userData);
         UserDataType getDataTypeReceived(String dataPathReceieved);

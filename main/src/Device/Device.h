@@ -18,6 +18,8 @@ class Device {
         SensorManager _sensor_system;                   // Sensor Management Unit.
         TB9051FTG _drive_system;                        // Drive System Management Unit.
 
+        void initADC();
+        void createSemaphores();
         void initSensorSystem();                        // Start the BME688, Microphone, and Ultrasonics.
         void initDriveSystem();                         // Start the Motors
         void initCommunicationSystem();                 // Start the Commmunications.
@@ -60,6 +62,7 @@ class Device {
         void test_bme_data_to_firebase();
         void test_mic_data_to_firebase();
         void test_bme_and_mic_data_to_firebase();
+        void test_mic();
         void test_US();
         void test_motor();
         void test_connection_to_firebase();

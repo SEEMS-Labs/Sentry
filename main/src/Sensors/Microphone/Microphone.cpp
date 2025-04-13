@@ -16,12 +16,11 @@ bool Microphone::readSensor(TickType_t xMaxBlockTime) {
     // Don't read inactive mic.
     if(!active) return res;
 
-    // Take analog reading.
-    int _adc_reading = analogRead(output);
-    //float decibels_measured = (3.3)*(_adc_reading/4095.0) * 50;
-    float decibels_measured = analogReadMilliVolts(output) * 50.0/1000.0;
+    // Take analog reading and stroe the last average for later computations.
+    float decibels_measured = calculateDecibelLevel();
+    lastBufferAverage = averageBuffer();
 
-    // Store.
+    // Store new value in buffer AFTER averaging.
     if(noiseIndex == bufferSize) noiseIndex = 0;
     noiseBuffer[noiseIndex++] = decibels_measured;
         
@@ -42,6 +41,14 @@ void Microphone::enable() {
  */
 void Microphone::disable() {
     active = false;
+}
+
+/**
+ * Check if this sensor is active or not.
+ * @return True if sensor is active, false otherwise.
+ */
+bool Microphone::isActive() {
+    return active;
 }
 
 /**
@@ -67,6 +74,7 @@ void Microphone::setThresholdFromPreferences(Preferences preferences) {
     Serial.println("Checking if Custom Mic Threshold Exist.");
 
     // Create preferences namespace in read mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_SENSOR_THDS, true);
     
     // Check for intial exisitence of bme thresholds (if this doesn't exist, this is the first Sentry init).
@@ -82,6 +90,7 @@ void Microphone::setThresholdFromPreferences(Preferences preferences) {
     
     // End the preferences namespace and return.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
 }
 
 /**
@@ -90,6 +99,7 @@ void Microphone::setThresholdFromPreferences(Preferences preferences) {
  * @param preferences Access to Sentry NVM (permanent memory).
  */
 void Microphone::setThresholdAndUpdatePreferences(Preferences preferences) {
+
     // Grab the new mic threshold.
     float newLimit = sensorManager->getUserSentryConfigDataPacket()->userNoiseLevelThreshold;
     Serial.printf("Mic Threshold [%f -> %f]\n", noiseThreshold, newLimit);
@@ -102,19 +112,30 @@ void Microphone::setThresholdAndUpdatePreferences(Preferences preferences) {
     if(limitChanged && newLimitInBounds) {
         Serial.println("Mic threshold change accepted.");
         noiseThreshold = newLimit;
+        taskENTER_CRITICAL(&preferencesMutex);
         preferences.begin(PREF_SENSOR_THDS, false);
         preferences.putFloat(PREF_SPL_THD, newLimit);
         preferences.end();
+        taskEXIT_CRITICAL(&preferencesMutex);
     }
 }
 
 /**
  * Signal that a sensor has passed its threshold(s) so that action can be taken.
- * @return A byte reading 0xFF if the sensor has passed its threshold, 0x00 othewise.
+ * @return A byte reading 0 if the threshold has not passed, 1 if it has been weakly 
+ * passed, 2 if it has been moderately passed, and 3 if it has been strongly passed.
  */
 char Microphone::passedThreshold() {
-    float res = averageBuffer();
-    return (res > noiseThreshold) ? THD_ALERT : !THD_ALERT;
+    char res = THD_ALERT;
+    float currAvg = averageBuffer();
+    float percentDiff = (currAvg - lastBufferAverage)/lastBufferAverage;
+    if(currAvg <= noiseThreshold) res = !THD_ALERT;
+    else {
+        if(percentDiff < DB_WEAK_PERCENT/100.0) res = WEAK_DB_BREACH;
+        else if(percentDiff > DB_STRONG_PERCENT/100.0) res = STRONG_DB_BREACH;
+        else res = MODERATE_DB_BREACH;
+    }
+    return res;
 }
 
 /**
@@ -137,3 +158,9 @@ float Microphone::getLastSoundLevelReading() {
 }
 
 float Microphone::getThreshold() { return noiseThreshold; }
+
+float Microphone::calculateDecibelLevel() {
+    return analogReadMilliVolts(output) * 50/1000;
+}
+
+float Microphone::getLastAverageSoundLevel() { return lastBufferAverage; }
