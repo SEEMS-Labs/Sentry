@@ -1,4 +1,5 @@
 #include "device.h"
+#include <nvs_flash.h>
 
 // Semaphores.
 portMUX_TYPE preferencesMutex = portMUX_INITIALIZER_UNLOCKED;
@@ -14,9 +15,9 @@ void Device::begin() {
     analogReadResolution(12);
 
     // Initialize Sentry Subsystems.
-    initSensorSystem();
-    initDriveSystem();
     initCommunicationSystem();
+    initSensorSystem();
+    //initDriveSystem();
 }
 
 void Device::sleep_mode_1() {
@@ -29,6 +30,15 @@ void Device::sleep_mode_2() {
 
 void Device::shutdown() {
 
+}
+
+void Device::clear() {
+    log_e("Clearing Sentry NVS Memory");
+    nvs_flash_erase();
+    nvs_flash_init();
+    while(true){
+        
+    }
 }
 
 TB9051FTG Device::get_drive_system() { return _drive_system; }
@@ -115,6 +125,10 @@ void Device::test_US() {
     _sensor_system.beginReadUltrasonicTask();
     _sensor_system.beginUpdateThresholdTask();
     StateManager::getManager()->setSentrySensorThresholdState(ThresholdState::ts_POST_STARTUP);
+
+}
+
+void Device::initVisionSystem() {
 
 }
 
@@ -218,9 +232,6 @@ void Device::test() {
 
     _sensor_system.beginReadMicrophoneTask();
     Serial.println("Mic Task Initialized.");
-
-    _sensor_system.beginUpdateThresholdTask();
-    Serial.println("Update Threshold Task Initialized.");
 
     taskCount = uxTaskGetNumberOfTasks();
     Serial.printf("Number of running tasks After: %d\n", taskCount);

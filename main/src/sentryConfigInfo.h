@@ -5,27 +5,27 @@
 
 #include <Arduino.h>
 
-#define EE2_TEST_MODE 1     // To override certain function flows for testing purposes.
-#define SERIAL_ONLY_MODE 1  // Mode to deal with things only via the serial terminal and no wi-fi.
+#define EE2_TEST_MODE 0     // To override certain function flows for testing purposes.
+#define SERIAL_ONLY_MODE 0  // Mode to deal with things only via the serial terminal and no wi-fi.
 #define MVMT_ACTIVE 0       // Mode to deal with movement being used.
 #define USE_HPE_DEF_THD 1   // Mode to use default hpe threshold in code, not on esp32 memory.
 #define PRINT_US_ERR 0      // Mode to print the debug outputs of US sensor related things.
-#define PRINT_US_TEST 1
+#define PRINT_US_TEST 0
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
 #define ONE_SECOND 1000
 
 // Test Wifi. (Covered via BLE communication).
-#define WIFI_SSID "SEEMS"
-#define WIFI_PASSWORD "@Ucf2025"
+#define WIFI_SSID_t "SEEMS"
+#define WIFI_PASSWORD_t "@Ucf2025"
 
 //#define WIFI_SSID "DIRECT-67-Pixel 6-PdaNet"
 //#define WIFI_PASSWORD "Keurs8ha"
 
 // Test Firebase authentication. (To be covered via BLE Communication).
-#define USER_EMAIL "es849112@ucf.edu"
-#define USER_PASSWORD "rCpnKBR4ZhtefmL"
+#define USER_EMAIL "es849112@ucf.edu"       // ee2@seems.com
+#define USER_PASSWORD "rCpnKBR4ZhtefmL"     // @Ucf2025
 
 // Firebase RTDB Keys/Urls.
 #define API_KEY "AIzaSyAGnxeU6342_TcjpmTKPT_WjB4AVTODfMk"
@@ -114,7 +114,8 @@
 **********************************************************/
 #define FB_CONN_TIMEOUT_PERIOD 15000 
 
-#define FB_SENTRY_CONN      ((String) "sentry/sentry_conn")
+#define FB_SENTRY_CONN      ((String) "sentry/camera/ip")
+#define FB_SENTRY__CAM_IP   ((String) "sentry/camera/ip") 
 #define FB_ENV_DATA_ADDRESS ((String) "sentry/readings/")
 #define FB_ALERTS_ADDRESS   ((String) "sentry/alerts/")
 
@@ -191,7 +192,8 @@ struct _obstcleDetectionData {
 enum class ConnectionType {
     ct_WIFI,
     ct_BT,
-    ct_FB
+    ct_FB,
+    ct_CAM
 };
 
 #define FB_USER_ACTIVITY_STATUS_ADDRESS "user_in_app"

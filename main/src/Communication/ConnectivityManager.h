@@ -5,6 +5,7 @@
 
 #include "Sentry/main/src/sentryConfigInfo.h"
 #include "Sentry/main/src/StateManager.h"
+#include "EspNowNode.h"
 
 #pragma once
 #include "Transmitter.h"
@@ -32,16 +33,19 @@ class ConnectivityManager {
 
 private:
     // General members.
-    bool isWiFiConnected = false;      // The Sentry's Wi-Fi connection status.
-    bool isBluetoothConnected = false; // The Sentry's BLE Connection status.
-    bool isBLEServerActive = false;    // The Sentry BLE Server activation status.
-    bool isFirebaseConnected = false;  // The Sentry's Firebase connection status.
-    Transmitter *_transmitter;         // The transmitter arm of this connectivity manager.
-    Receiver *_receiver;               // The receiver arm of this connectivity manager.
+    bool isWiFiConnected = false;       // The Sentry's Wi-Fi connection status.
+    bool isBluetoothConnected = false;  // The Sentry's BLE Connection status.
+    bool isBLEServerActive = false;     // The Sentry BLE Server activation status.
+    bool isFirebaseConnected = false;   // The Sentry's Firebase connection status.
+    inline static bool cameraIpAcquired = false;
+    inline static String cameraIp;
+    Transmitter *_transmitter;          // The transmitter arm of this connectivity manager.
+    Receiver *_receiver;                // The receiver arm of this connectivity manager.
+    EspNowNode *sentryEspNowNode;       // The connection mechanism between Sentry and SentryCam.
 
     // Wi-Fi + Firebase members.
-    String ssid = (EE2_TEST_MODE) ? WIFI_SSID : DEFAULT_SSID;         // User Wi-Fi SSID.
-    String password = (EE2_TEST_MODE) ? WIFI_PASSWORD : DEFAULT_PASS; // User Wi-Fi password.
+    String ssid = (EE2_TEST_MODE) ? WIFI_SSID_t : DEFAULT_SSID;         // User Wi-Fi SSID.
+    String password = (EE2_TEST_MODE) ? WIFI_PASSWORD_t : DEFAULT_PASS; // User Wi-Fi password.
     UserAuth userAuth;
     FirebaseApp _fbApp;
     RealtimeDatabase _rtdb;
@@ -76,6 +80,11 @@ private:
     void initSentryBLEServer();
     void deinitSentryBLEServer();
 
+    void initSentryCamIpRetrieval();
+    void deinitSentryCamIpRetrieval();
+    void constructEspNowNode(const uint8_t* peerMacAddress, bool masterMode);
+    static BaseType_t cameraIpCallBack(const char *ip);
+
     // Wi-Fi credential management.
     bool checkForCredentials();
     bool checkCredentialValidity();
@@ -103,6 +112,7 @@ public:
     {
         constructTransmitter(envData, envStatus);
         constructReceiver(userConfiguration, userMovementCommands);
+        constructEspNowNode(dev_Cam_A, true);
     }
 
     void begin();

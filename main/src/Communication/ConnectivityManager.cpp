@@ -124,6 +124,10 @@ void ConnectivityManager::begin() {
  */
 void ConnectivityManager::onCredentialedStartup() {
 
+    // Transmit cam ip.
+    connect(ConnectionType::ct_CAM);
+    disconnect(ConnectionType::ct_CAM);
+    
     // Connect wi-Fi and Firebase.
     connect(ConnectionType::ct_WIFI);
     connect(ConnectionType::ct_FB);
@@ -307,6 +311,11 @@ void ConnectivityManager::connect(ConnectionType cType) {
             initSentryBLEServer();
             Serial.println("BLE Server Initialized!");
             break;
+        case ConnectionType::ct_CAM :
+            Serial.println("Beginning Connection to Sentry Cam for Exchange of Ip.");
+            initSentryCamIpRetrieval();
+            Serial.println("Connection to SentryCam process complete");
+            break;
     }
 }
 
@@ -325,6 +334,9 @@ void ConnectivityManager::disconnect(ConnectionType cType) {
             break;
         case ConnectionType::ct_BT :
             deinitSentryBLEServer();
+            break;
+        case ConnectionType::ct_CAM : 
+            deinitSentryCamIpRetrieval();
             break;
     }
 }
@@ -393,8 +405,9 @@ void ConnectivityManager::initFirebase() {
 
     // Set the "sentry_conn" field in Firebase to notify the partner app of successful connection.
     else {
+        bool cam_ip_status = _rtdb.set<String>(aClient, FB_SENTRY_CAM_IP, cameraIp);
         bool status = _rtdb.set<bool>(aClient, FB_SENTRY_CONN, true);
-        if(_fbApp.ready() && status) {
+        if(_fbApp.ready() && status && cam_ip_status) {
             Serial.println("Connection Good. Sentry Firebase status succesfully updated.");
             isFirebaseConnected = true;
         }
@@ -557,3 +570,26 @@ AsyncResult ConnectivityManager::getSentryLinkStreamResult() {
 
 Transmitter *ConnectivityManager::getTransmitter() { return _transmitter; }
 Receiver *ConnectivityManager::getReceiver() { return _receiver; }
+
+void ConnectivityManager::initSentryCamIpRetrieval() {
+    sentryEspNowNode->addInfoToSend(ssid.c_str(), password.c_str());
+    sentryEspNowNode->registerProcessCameraIPCallBack(cameraIpCallBack);
+    sentryEspNowNode->start();
+    while(sentryEspNowNode->credentialsPassedThrough() != true) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+void ConnectivityManager::deinitSentryCamIpRetrieval() {
+    free(sentryEspNowNode);
+}
+
+void ConnectivityManager::constructEspNowNode(const uint8_t* peerMacAddress, bool masterMode) {
+    sentryEspNowNode = new EspNowNode(peerMacAddress, true);
+}
+
+BaseType_t ConnectivityManager::cameraIpCallBack(const char *ip) {
+    cameraIpAcquired = true;
+    cameraIp = String(ip);   
+    return pdPASS;
+}

@@ -19,7 +19,8 @@ class Device {
         TB9051FTG _drive_system;                        // Drive System Management Unit.
 
         void initADC();
-        void createSemaphores();
+        void createSemaphores();    
+        void initVisionSystem();                        // Start the camera.
         void initSensorSystem();                        // Start the BME688, Microphone, and Ultrasonics.
         void initDriveSystem();                         // Start the Motors
         void initCommunicationSystem();                 // Start the Commmunications.
@@ -44,10 +45,13 @@ class Device {
 
         // Unimplemented. Deeper Sleep mode for the Sentry.    
         void sleep_mode_2();
-
+        
         // Unimplemented. Shuts Sentry Down during a dedicated shutdown.    
         void shutdown();
-        
+
+        // Clear Sentry preferences namespace.
+        void clear();
+
         // Returns the Drive System Manager of the Sentry.  
         TB9051FTG get_drive_system();
         

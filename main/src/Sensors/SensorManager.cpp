@@ -75,8 +75,8 @@ void poll_US_task(void *pvSensorManager) {
         readingGood[L_US_ID] = leftSensor->readSensor(US_READ_TIME);
         readingGood[R_US_ID] = rightSensor->readSensor(US_READ_TIME);
 
+        if(PRINT_US_TEST || PRINT_US_ERR) Serial.println("---------------------------------------------------------");
         if(PRINT_US_TEST) {
-            Serial.println("---------------------------------------------------------");
             if(frontSensor->isActive() && readingGood[F_US_ID]) {
                 Serial.printf("Front\t Current reading: %.2f, LBA: %f, CBA:%f\n", 
                     frontSensor->getDistanceReading(), 
@@ -209,7 +209,7 @@ void poll_US_task(void *pvSensorManager) {
         else {
             Serial.println("Hmm. How did we get here?");
         }
-        Serial.println("---------------------------------------------------------\n");
+        if(PRINT_US_TEST || PRINT_US_ERR) Serial.println("---------------------------------------------------------\n");
 
         // Poll sensors periodically.
         vTaskDelayUntil(&xLastWakeTime, MAX_US_POLL_TIME + 250);
