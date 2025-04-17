@@ -5,7 +5,18 @@
 // Grab libraries. 
 #include "SensorInterface.h"
 #include "Sentry/main/src/sentryConfigInfo.h"
+#include "Sentry/main/src/StateManager.h"
+#pragma once
+#include "Sentry/main/src/Sensors/SensorManager.h"
 #include <Arduino.h>
+#include <Preferences.h>
+
+#define HPE_PERCENT_DIFF 2      // Meaningful percent difference between current buffer average and HPE Threshold (in %).
+#define HPE_WEAK_PERCENT 5      // Percent difference between current and last buffer averages weakly indicating presence (in %).
+#define HPE_STRONG_PERCENT 10   // Percent difference between current and last buffer averages strongly indicating presence (in %).
+
+// Forward definition of SensorManager.
+class SensorManager;
 
 /**
  * Class representing the HC-SR04 Ultrasonic Sensors used as obstacle and presence detectors.
@@ -31,12 +42,12 @@ class HCSR04 : public SensorInterface {
         /**
          * The distance from the sensor (in inches) that an obstacle must be to be "detected".
          */
-        float obstacleDetectionThreshold;
+        float obstacleDetectionThreshold = -1.0;
 
         /**
          * The distance from the sensor (in inches) that an object/person must be to be "detected".
          */
-        float presenceDetectionThreshold = 24;
+        float presenceDetectionThreshold = DEF_HP_EST_LIM;
 
         /**
          * Quantifies if this sensor is on or not (should be polled or not).
@@ -49,17 +60,22 @@ class HCSR04 : public SensorInterface {
         int distIndex = 0;
         
         /**
+         * Last average of the buffer.
+         */
+        float lastBufferAverage = 0;
+
+        /**
          * Size of distance buffer.
          */
-        static constexpr int bufferSize = 256;
+        static constexpr int bufferSize = 5;
 
         /**
          * Buffer of past distances measured.
          */
         float pastDistances[bufferSize];
 
-        unsigned long isrPulseStart = -1; // Stores the time at which the sensor's echo has begun from ISR.
-        unsigned long isrPulseEnd = -1;   // Stores the time at which the sensor's echo has finished from ISR.    
+        unsigned long isrPulseStart = 0; // Stores the time at which the sensor's echo has begun from ISR.
+        unsigned long isrPulseEnd = 0;   // Stores the time at which the sensor's echo has finished from ISR.    
 
         /**
          * Pulse this ultrasonic sensor's trigger pin to initiate a measurement.
@@ -71,6 +87,10 @@ class HCSR04 : public SensorInterface {
          */
         float computeInches();
 
+        SensorManager *sensorManager;
+        void setHpeThresholdFromPreferences(Preferences preferences);
+        void setHpeThresholdAndUpdatePreferences(Preferences preferences);
+
     public:
         /**
          * Defines the sensors pins and connects them to the ESP32, and sets the thresholds of a sensor.
@@ -79,7 +99,12 @@ class HCSR04 : public SensorInterface {
          * @param id The unique Id for this ultrasonic sensor.
          * @param obstacleDetectionThreshold The distance from the sensor (in inches) that an obstacle must be to be "detected".
          */
-        HCSR04(int trigger, int echo, int id, int obstacleDetectionThreshold) : trigger(trigger), echo(echo), id(id), obstacleDetectionThreshold(obstacleDetectionThreshold) {};
+        HCSR04(int trigger, int echo, int id, int obstacleDetectionThreshold, SensorManager *sensorManager) : 
+            trigger(trigger), 
+            echo(echo), 
+            id(id), 
+            obstacleDetectionThreshold(obstacleDetectionThreshold), 
+            sensorManager(sensorManager) {};
 
         /**
          * Initializes the sensor pin connections wrt the ESP32 and enables sensor.
@@ -89,8 +114,9 @@ class HCSR04 : public SensorInterface {
         /**
          * Poll the sensor and store the data. This must only be called from within a task.
          * @param xMaxBlockTime The maximum time allotted to read a sensor.
+         * @return True if the reading was successful, false otherwise.
          */
-        float readSensor(TickType_t xMaxBlockTime) override;
+        bool readSensor(TickType_t xMaxBlockTime) override;
 
         /**
          * Mark a sensor as relevant for output collection.
@@ -103,10 +129,25 @@ class HCSR04 : public SensorInterface {
         void disable() override;
 
         /**
+         * Retrieve this sensors Human presence estimation threshold.
+         */
+        float getHpeThreshold();
+
+        /**
+         * Set this ultrasonic sensors human presence estimation threshold.
+         * @param preferences Access to Sentry NVM (permanent memory).
+         */
+        void setHpeThreshold(Preferences preferences);
+
+        /**
          * Signal that this ultrasonic sensor has passed one or both of its 2 thresholds.
-         * @return A byte where the Bit 7 (MSB) represents ths obstacle detection threshold 
-         * and Bit 6 representes the presence detection threshold. A bit set to 1 indicates 
-         * the distance threshold has been breached and a bit set to 0 indicates the opposite.
+         * @return A byte where the least two significant bits represent detection threshold
+         * breaches and the next 3 represent the strength of the breach.
+         * Bit 0: Obstacle detection,
+         * Bit 1: Human presence estimation,
+         * Bit 2: Strong breach (certain that the barrier has been broken).
+         * Bit 3: Moderate breach.
+         * Bit 4: Weak breach.
          */
         char passedThreshold() override;
 
@@ -126,7 +167,7 @@ class HCSR04 : public SensorInterface {
          * Check if this sensor is active or not.
          * @return True if sensor is active, false otherwise.
          */
-        bool isActive();
+        bool isActive() override;
 
         /**
          * Set this sensors obstacle detection threshold.
@@ -152,6 +193,14 @@ class HCSR04 : public SensorInterface {
          * @param end This is the end time of the echo pulse once this sensor has begun measuring.
          */
         void setIRSEndPulse(ulong end);
+
+        /**
+         * Get the last distance reading.
+         * @return The last known distance reading from this sensor.
+         */
+        float getDistanceReading();
+
+        float getLastBufferAverage();
 };
 
 // End include guard.

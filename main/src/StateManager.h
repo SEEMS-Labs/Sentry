@@ -17,6 +17,7 @@ class StateManager {
         MovementState sms;              // Sentry Movement State.
         StartupState sss;               // Sentry Startup State.
         ConnectionState ncs;            // Sentry Network Connectivity State.
+        ThresholdState sts;             // Sentry Sensor Threshold Set from Memory State.
 
         inline static StateManager* manager_instance = NULL;  // Pointer to StateManager instance.
         StateManager() : 
@@ -25,7 +26,8 @@ class StateManager {
             sdts(DataTransmissionState::ds_IDLE),   // Default to idle transmission state.
             sms(MovementState::ms_IDLE),            // Default to idle movement state.
             sss(StartupState::ss_INVALID),          // Default to invalid startup state.
-            ncs(ConnectionState::ns_NONE) {}        // Default to no networks connected state.
+            ncs(ConnectionState::ns_NONE),          // Default to no networks connected state.
+            sts(ThresholdState::ts_PRE_STARTUP) {}  // Default to pre startup state.
 
     public:
         PowerState getSentryPowerState()                            { return sps; } 
@@ -34,6 +36,7 @@ class StateManager {
         MovementState getSentryMovementState()                      { return sms; }
         StartupState getSentryStartupState()                        { return sss; }
         ConnectionState getSentryConnectionState()                  { return ncs; }
+        ThresholdState getSentrySensorThresholdState()              { return sts; }
 
         void setSentryPowerState(PowerState state)                          { this->sps = state; }
         void setSentryWakeState(WakeState state)                            { this->sws = state; }
@@ -41,6 +44,7 @@ class StateManager {
         void setSentryMovementState(MovementState state)                    { this->sms = state; }
         void setSentryStartupState(StartupState state)                      { this->sss = state; }
         void setSentryConnectionState(ConnectionState state)                { this->ncs = state; } 
+        void setSentrySensorThresholdState(ThresholdState state)            { this->sts = state; }
 
         StateManager(const StateManager *obj) = delete;     // Delete the copy ctor.
         

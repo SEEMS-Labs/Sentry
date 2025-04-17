@@ -1,5 +1,8 @@
 #include "ConnectivityManager.h"
 
+// Define Semaphore handles.
+SemaphoreHandle_t firebase_app_mutex = NULL;
+
 /**
  * Check the ESP32 preferences to see if the user has previously set Wi-Fi
  * credentials. Optionally, if Wi-Fi credentials do exist upon checking, they 
@@ -9,13 +12,14 @@
 bool ConnectivityManager::checkForCredentials() {
     Serial.println("Checking if Credentials Exist.");
 
-    // Overide normal process if testing w/ static wi-fi creds.
+    // Override normal process if testing w/ static wi-fi creds.
     bool credsExist = false;
     if(EE2_TEST_MODE && (ssid != DEFAULT_SSID) && (password != DEFAULT_PASS)) {
         return true;    // True = good credentials. Only override if your credentials are guaranteed.
     }
 
     // Create preferences namespace in read mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_CREDS, true);
     
     // Check for intial exisitence of SSID (if this doesn't exist, this is the first Sentry init).
@@ -35,6 +39,7 @@ bool ConnectivityManager::checkForCredentials() {
     if(!credsExist) Serial.println("Credentials did not exist.");
     // End the preferences namespace and return.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
     return credsExist;
 }
 
@@ -71,6 +76,11 @@ bool ConnectivityManager::checkCredentialValidity() {
     return successStatus;
 }
 
+/**
+ * Set the Wi-Fi credentials of this Connectivity Manager for use in connecting to Wi-Fi.
+ * @param ssid Wi-Fi network name.
+ * @param password Wi-Fi network password.
+ */
 void ConnectivityManager::setWiFiCredentials(String ssid, String password) {
     Serial.println("Credentials existed. Setting credentials");
     Serial.printf("SSID: %s, PASS: %s\n", ssid, password);
@@ -102,6 +112,10 @@ void ConnectivityManager::begin() {
         onCredentialessStartup();
         Serial.println("Credentialess startup completed.");
     }
+
+    // Start the transmitter and receiver.
+    _transmitter->begin();
+    _receiver->begin();
 }
 
 /**
@@ -110,6 +124,10 @@ void ConnectivityManager::begin() {
  */
 void ConnectivityManager::onCredentialedStartup() {
 
+    // Transmit cam ip.
+    connect(ConnectionType::ct_CAM);
+    disconnect(ConnectionType::ct_CAM);
+    
     // Connect wi-Fi and Firebase.
     connect(ConnectionType::ct_WIFI);
     connect(ConnectionType::ct_FB);
@@ -149,7 +167,7 @@ void ConnectivityManager::onCredentialessStartup() {
                 Serial.println("Waiting for BLE Client connection.");
                 if(_stateManager->getSentryConnectionState() == ConnectionState::ns_BLE) {
                     Serial.println("--BLE Active: Connected to BLE Client.");
-                    _transmitter.transmitBLE(BLETransmitCode::ble_tx_wait, characteristic); // Tx waiting on connection.
+                    _transmitter->transmitBLE(BLETransmitCode::ble_tx_wait, characteristic); // Tx waiting on connection.
                     isBluetoothConnected = true;
                     break;
                 }
@@ -161,10 +179,10 @@ void ConnectivityManager::onCredentialessStartup() {
         while(_stateManager->getSentryConnectionState() == ConnectionState::ns_BLE && !readyToDisconnect) {
             Serial.println("Waiting for Network Credentials.");
             // Check if any information is ready to be read from the receiver.
-            bleDataAvailable = _receiver.checkIfDataAvailible(UserDataType::UDT_WIFI_AUTH);
+            bleDataAvailable = _receiver->checkIfBLEDataAvailible(UserDataType::UDT_WIFI_AUTH);
             if(bleDataAvailable && !readyToDisconnect) {
                 // Read the data.
-                dataReceived = _receiver.receiveBLEData();
+                dataReceived = _receiver->receiveBLEData();
                 Serial.println("Data Availible!");
                 vTaskDelay(pdMS_TO_TICKS(500));    // Small delay for BLE Stack before updating it.
 
@@ -175,16 +193,16 @@ void ConnectivityManager::onCredentialessStartup() {
 
                     Serial.printf("Received data transmission: %s -> %s\n", dataReceived.c_str(), dataSanitized.c_str());
 
-                    if(dataReceived[0] != '0' && dataReceived[0] != '1') _transmitter.transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
+                    if(dataReceived[0] != '0' && dataReceived[0] != '1') _transmitter->transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
                     else {
-                        _transmitter.transmitBLE(BLETransmitCode::ble_tx_data_valid, characteristic);
+                        _transmitter->transmitBLE(BLETransmitCode::ble_tx_data_valid, characteristic);
                         if(dataReceived[0] == '0') ssid = dataSanitized;
                         else if(dataReceived[0] == '1') password = dataSanitized;
                     } 
                 }
 
                 // Indicate that the data received was of invalid length.
-                else _transmitter.transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
+                else _transmitter->transmitBLE(BLETransmitCode::ble_tx_data_invalid, characteristic);
             }
             
             // Check credential validity if credentials have both been set.
@@ -195,7 +213,7 @@ void ConnectivityManager::onCredentialessStartup() {
                 // Inform Sentry Link that credentials were valid. Leave loop.
                 if(readyToDisconnect) {
                     Serial.println("Credentials VALID! Sending Signal to disconnect!");
-                    _transmitter.transmitBLE(BLETransmitCode::ble_tx_creds_valid, characteristic);
+                    _transmitter->transmitBLE(BLETransmitCode::ble_tx_creds_valid, characteristic);
                     break;
                 }
 
@@ -204,7 +222,7 @@ void ConnectivityManager::onCredentialessStartup() {
                     Serial.println("Credentials INVALID! Sending Signal to retry!");
                     ssid = DEFAULT_SSID;
                     password = DEFAULT_PASS;
-                    _transmitter.transmitBLE(BLETransmitCode::ble_tx_creds_invalid, characteristic);
+                    _transmitter->transmitBLE(BLETransmitCode::ble_tx_creds_invalid, characteristic);
                 }
             }
 
@@ -254,6 +272,7 @@ void ConnectivityManager::onCredentialessStartup() {
  */
 void ConnectivityManager::updatePreferredCredentials() {
     // Create preferences namespace in read/write mode.
+    taskENTER_CRITICAL(&preferencesMutex);
     preferences.begin(PREF_CREDS, false);  
 
     // update credentials. 
@@ -266,6 +285,7 @@ void ConnectivityManager::updatePreferredCredentials() {
     Serial.printf("Newly Stored Creds: SSID = %s, PASS = %s\n", name.c_str(), password.c_str());
     // End preferences namespace.
     preferences.end();
+    taskEXIT_CRITICAL(&preferencesMutex);
 }
 
 /**
@@ -277,6 +297,7 @@ void ConnectivityManager::connect(ConnectionType cType) {
     switch (cType) {
         case ConnectionType::ct_FB :
             Serial.println("Beginning Connection to Firebase!");
+            createFirebaseSemaphores();
             initFirebase();
             Serial.println("Firebase Initialized!");
             break;
@@ -289,6 +310,11 @@ void ConnectivityManager::connect(ConnectionType cType) {
             Serial.println("Beginning Init of BLE Server!");
             initSentryBLEServer();
             Serial.println("BLE Server Initialized!");
+            break;
+        case ConnectionType::ct_CAM :
+            Serial.println("Beginning Connection to Sentry Cam for Exchange of Ip.");
+            initSentryCamIpRetrieval();
+            Serial.println("Connection to SentryCam process complete");
             break;
     }
 }
@@ -308,6 +334,9 @@ void ConnectivityManager::disconnect(ConnectionType cType) {
             break;
         case ConnectionType::ct_BT :
             deinitSentryBLEServer();
+            break;
+        case ConnectionType::ct_CAM : 
+            deinitSentryCamIpRetrieval();
             break;
     }
 }
@@ -334,31 +363,59 @@ bool ConnectivityManager::isConnected(ConnectionType cType) {
 void ConnectivityManager::initFirebase() {
     Firebase.printf("Firebase Client v%s\n", FIREBASE_CLIENT_VERSION);
     Serial.println("Initializing app..."); 
+
+    // Client for transmitter.
     sslClient.setInsecure();
 
-    initializeApp(aClient, _fbApp, getAuth(userAuth), aResultNoCallback);
-    fbAuthHandler();
+    // Client for receiver.
+    sslStreamClient.setInsecure();
 
-    // Binding the FirebaseApp for authentication handler.
-    // To unbind, use Database.resetApp();
+    initializeApp(aClient, _fbApp, getAuth(userAuth), auth_debug_print, "AuthTask");
+
+    // Binding the FirebaseApp for authentication handler. To unbind, use Database.resetApp();
     _fbApp.getApp<RealtimeDatabase>(_rtdb);
     _rtdb.url(DATABASE_URL);
 
-    // In case setting the external async result to the sync task (optional)
-    // To unset, use unsetAsyncResult().
-    aClient.setAsyncResult(aResultNoCallback);
+    // Setup the firebase stream for the reciever to watch.
+    aStreamClient.setSSEFilters("get,put,patch,keep-alive,cancel,auth_revoked");
+    _rtdb.get(aStreamClient, SENTRYLINK_ROOT, streamResult, true);
 
-    // Write true to "sentry_active" field to inidcate sentry is active.
-    Serial.print("Notifiying Firebase that Sentry has connected succesfully.");
-    bool status = _rtdb.set<bool>(aClient, "sentry_conn", true);
-    if(status) {
-        Serial.println("Sentry Firebase status succesfully updated");
-        isFirebaseConnected = true;
+    // Attempt to connect to Firebase with a timeout.
+    Serial.println("Check for succesful Sentry Connection to Firebase.");
+    ulong startTime = millis();
+    while (!_fbApp.ready() && (millis() - startTime) < FB_CONN_TIMEOUT_PERIOD) {
+        //Serial.println("Waiting for Firebase to be ready...");
+        _fbApp.loop();
+        delay(1); // Give Firebase more time to stabilize.
     }
-    else fpPrintError(aClient.lastError().code(), aClient.lastError().message());
+    ulong endTime = millis();
+
+    // Show the connection status and timed value.
+    if((endTime - startTime) < FB_CONN_TIMEOUT_PERIOD && _fbApp.ready()) Serial.printf("Connection to Firebase took: %lu ms\n", endTime - startTime);
+    else Serial.println("Connection to Firebase timed out.");
     
-    // Run a 1 second delay just because. Might be better placed elsewhere.
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // Deal with non connection state.
+    if(_fbApp.ready() == false) {
+        Serial.println("Unsuccesful connection. Timeout reached....");
+        while(true) {
+            Serial.println("Press Reset Button and Try again Until a better solution is found out.");
+            delay(1000);
+        }
+    }
+
+    // Set the "sentry_conn" field in Firebase to notify the partner app of successful connection.
+    else {
+        bool cam_ip_status = _rtdb.set<String>(aClient, FB_SENTRY_CAM_IP, cameraIp);
+        bool status = _rtdb.set<bool>(aClient, FB_SENTRY_CONN, true);
+        if(_fbApp.ready() && status && cam_ip_status) {
+            Serial.println("Connection Good. Sentry Firebase status succesfully updated.");
+            isFirebaseConnected = true;
+        }
+        else Serial.println("Connection Bad. Sentry Firebase status not updated.");
+    }
+    
+    // Update Connectivity state.
+    _stateManager->setSentryConnectionState(ConnectionState::ns_FB_AND_WF);
 }
 
 /**
@@ -374,6 +431,9 @@ void ConnectivityManager::initWiFi() {
     }
     isWiFiConnected = true;
     Serial.printf("\nConnected W/ IP: %s\n", WiFi.localIP().toString().c_str());   
+
+    // Update Connection State.
+    _stateManager->setSentryConnectionState(ConnectionState::ns_WF_ONLY);
 }
 
 /**
@@ -408,8 +468,8 @@ void ConnectivityManager::initSentryBLEServer() {
     characteristic->setValue("Sentry Ready.");
 
     // Set callbacks for server and characteristic.
-    server->setCallbacks(&_receiver);
-    characteristic->setCallbacks(&_receiver);
+    server->setCallbacks(_receiver);
+    characteristic->setCallbacks(_receiver);
 
     // Create and modify advertiser.
     advertiser = BLEDevice::getAdvertising();
@@ -450,35 +510,86 @@ void ConnectivityManager::deinitSentryBLEServer() {
     delay(1000);
 }
 
-/**
- * Prints an error message related to Firebase error. 
- * @param code the error code.
- * @param msg the error description.
- */
-void ConnectivityManager::fpPrintError(int code, String msg) {
-    Firebase.printf("Error, msg: %s, code: %d\n", msg.c_str(), code);
-}
+void ConnectivityManager::auth_debug_print(AsyncResult &aResult) {
+    if (aResult.isEvent())
+    {
+        Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.eventLog().message().c_str(), aResult.eventLog().code());
+    }
 
-/**
- * Blocking authentication handler with timeout for Firebase.
- */
-void ConnectivityManager::fbAuthHandler() {
-    unsigned long ms = millis();
-    while (_fbApp.isInitialized() && !_fbApp.ready() && millis() - ms < 120 * 1000) {
-        // The JWT token processor required for ServiceAuth and CustomAuth authentications.
-        // JWT is a static object of JWTClass and it's not thread safe.
-        // In multi-threaded operations (multi-FirebaseApp), you have to define JWTClass for each FirebaseApp,
-        // and set it to the FirebaseApp via FirebaseApp::setJWTProcessor(<JWTClass>), before calling initializeApp.
-        JWT.loop(_fbApp.getAuth());
-        fbLogResult(aResultNoCallback);
+    if (aResult.isDebug())
+    {
+        Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
+    }
+
+    if (aResult.isError())
+    {
+        Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
     }
 }
 
 /**
- * Log the result from the firebase async result.
+ * Create the mutex that guards the firebase app used in transmission.
  */
-void ConnectivityManager::fbLogResult(AsyncResult &aResult) {
-    if (aResult.isEvent()) Firebase.printf("Event task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.appEvent().message().c_str(), aResult.appEvent().code());
-    if (aResult.isDebug()) Firebase.printf("Debug task: %s, msg: %s\n", aResult.uid().c_str(), aResult.debug().c_str());
-    if (aResult.isError()) Firebase.printf("Error task: %s, msg: %s, code: %d\n", aResult.uid().c_str(), aResult.error().message().c_str(), aResult.error().code());
+void ConnectivityManager::createFirebaseSemaphores() {
+    firebase_app_mutex = xSemaphoreCreateMutex();
+}
+
+/**
+ * Construct pointer to the transmitter. This is done seperately from the initialzer list
+ * because of Circular Inclusion between the transmitter and this manager.
+ */
+void ConnectivityManager::constructTransmitter(SensorData *envData, Alerts *envStatus) {
+    _transmitter = new Transmitter(envData, envStatus, this);   // Construct pointer to the transmitter object.
+}
+
+void ConnectivityManager::constructReceiver(UserSentryConfig *userConfiguration, UserDriveCommands *userMovementCommands) {
+    _receiver = new Receiver(userConfiguration, userMovementCommands, this);
+}
+
+/**
+ * Return pointer to the Firebase object.
+ */
+RealtimeDatabase *ConnectivityManager::getFirebaseDatabase() { return &_rtdb; }
+
+/**
+ * Return pointer to the Asynchonous Client object.
+ */
+AsyncClientClass *ConnectivityManager::getAsyncClient() { return &aClient; }
+
+/**
+ * Return pointer to the Firebase App object.
+ */
+FirebaseApp *ConnectivityManager::getFbApp() { return &_fbApp; }
+
+/**
+ * Return pointer to the stream result that holds information transmitted by the Sentry.
+ */
+AsyncResult ConnectivityManager::getSentryLinkStreamResult() {
+    return streamResult;
+}
+
+Transmitter *ConnectivityManager::getTransmitter() { return _transmitter; }
+Receiver *ConnectivityManager::getReceiver() { return _receiver; }
+
+void ConnectivityManager::initSentryCamIpRetrieval() {
+    sentryEspNowNode->addInfoToSend(ssid.c_str(), password.c_str());
+    sentryEspNowNode->registerProcessCameraIPCallBack(cameraIpCallBack);
+    sentryEspNowNode->start();
+    while(sentryEspNowNode->credentialsPassedThrough() != true) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+void ConnectivityManager::deinitSentryCamIpRetrieval() {
+    free(sentryEspNowNode);
+}
+
+void ConnectivityManager::constructEspNowNode(const uint8_t* peerMacAddress, bool masterMode) {
+    sentryEspNowNode = new EspNowNode(peerMacAddress, true);
+}
+
+BaseType_t ConnectivityManager::cameraIpCallBack(const char *ip) {
+    cameraIpAcquired = true;
+    cameraIp = String(ip);   
+    return pdPASS;
 }
