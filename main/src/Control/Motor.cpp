@@ -76,7 +76,7 @@ bool Motor::monitorOverCurrentConditions() {
         }
         else {
             res = false;
-            Serial.printf("\tOCM Pin Read = %f mV, Current = %f mA, [%f < %f]\n", value, comparisonCurrent, comparisonCurrent, currLim);
+            //Serial.printf("\tOCM Pin Read = %f mV, Current = %f mA, [%f < %f]\n", value, comparisonCurrent, comparisonCurrent, currLim);
         }
 
     }

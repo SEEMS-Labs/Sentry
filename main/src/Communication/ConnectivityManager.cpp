@@ -125,8 +125,10 @@ void ConnectivityManager::begin() {
 void ConnectivityManager::onCredentialedStartup() {
 
     // Transmit cam ip.
-    connect(ConnectionType::ct_CAM);
-    disconnect(ConnectionType::ct_CAM);
+    if(CAMERA_ON) {
+        connect(ConnectionType::ct_CAM);
+        disconnect(ConnectionType::ct_CAM);
+    }
     
     // Connect wi-Fi and Firebase.
     connect(ConnectionType::ct_WIFI);

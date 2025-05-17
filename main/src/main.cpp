@@ -1,10 +1,7 @@
-
-///*
-
 // External libraries.
 #include <Arduino.h>
 
-// Internal headers.h
+// Internal headers.
 #include "sentryConfigInfo.h"
 #include "Device.h"
 
@@ -26,6 +23,8 @@ void setup() {
         delay(500);
     }
     sentry.begin();
+    //sentry.test_manual_motor_movement();
+    //sentry.test_motors();
 } 
 
 void loop() {    
@@ -33,4 +32,3 @@ void loop() {
     vTaskDelay(pdMS_TO_TICKS(1000));
 }
 
-//*/

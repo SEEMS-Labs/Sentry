@@ -112,7 +112,7 @@ public:
     {
         constructTransmitter(envData, envStatus);
         constructReceiver(userConfiguration, userMovementCommands);
-        constructEspNowNode(dev_Cam_A, true);
+        constructEspNowNode(dev_Cam_C, true);
     }
 
     void begin();

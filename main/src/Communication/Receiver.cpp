@@ -189,9 +189,10 @@ void Receiver::decodeAndUpdateUserConfigurationData(uint64_t userConfigData) {
 void Receiver::decodeAndUpdateUserDriveCommands(uint32_t UserDriveCommandData) {
 
     // Decode initial data.
+    Serial.printf("Number to Decode: %d\n", UserDriveCommandData);
     bool ctrlPower = (UserDriveCommandData >> SL_ctrlInfo::ACTIVE_LSB) & SL_ctrlInfo::ACTIVE_MASK;
-    char ctrlState = (UserDriveCommandData >> SL_ctrlInfo::CTRL_STA_LSB) & SL_ctrlInfo::CD_STA_MASK;
-    char dpadField = (UserDriveCommandData >> SL_ctrlInfo::DPAD_STA_LSB) & SL_ctrlInfo::ACTIVE_MASK;
+    char ctrlState = (UserDriveCommandData >> SL_ctrlInfo::CTRL_STA_LSB) & SL_ctrlInfo::CTRL_STA_MASK;
+    char dpadField = (UserDriveCommandData >> SL_ctrlInfo::DPAD_STA_LSB) & SL_ctrlInfo::DPAD_STA_MASK;
     signed short int joystickX = (UserDriveCommandData >> SL_ctrlInfo::JSTK_X_LSB) & SL_ctrlInfo::JOYSTICK_MASK;
     signed short int joystickY = (UserDriveCommandData >> SL_ctrlInfo::JSTK_Y_LSB) & SL_ctrlInfo::JOYSTICK_MASK;
 
@@ -213,6 +214,11 @@ void Receiver::decodeAndUpdateUserDriveCommands(uint32_t UserDriveCommandData) {
     userMovementCommands->dpad_Right = dpadR;
     userMovementCommands->joystick_X = joystickX;
     userMovementCommands->joystick_Y = joystickY;
+
+    // Update sentry state if needed:
+    Serial.printf("Ctrl Power = %d, MS = %d\n", ctrlPower, _stateManager->getSentryMovementState());
+    if(ctrlPower && (_stateManager->getSentryMovementState()) == MovementState::ms_IDLE)
+        _stateManager->setSentryMovementState(MovementState::ms_MANUAL);
 
 }
 

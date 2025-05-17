@@ -20,7 +20,6 @@ class Device {
 
         void initADC();
         void createSemaphores();    
-        void initVisionSystem();                        // Start the camera.
         void initSensorSystem();                        // Start the BME688, Microphone, and Ultrasonics.
         void initDriveSystem();                         // Start the Motors
         void initCommunicationSystem();                 // Start the Commmunications.
@@ -34,7 +33,7 @@ class Device {
             ObstacleData *obstacleInfo) :                           // Address to the global obstacle data packet.
             _communication_system(envData, envStatus, userConfiguration, userMovementCommands),
             _sensor_system(envData, envStatus, userConfiguration, obstacleInfo),
-            _drive_system(userMovementCommands),
+            _drive_system(userMovementCommands, obstacleInfo),
             _stateManager(StateManager::getManager()) {}
 
         // Start the Sentry.
@@ -68,7 +67,8 @@ class Device {
         void test_bme_and_mic_data_to_firebase();
         void test_mic();
         void test_US();
-        void test_motor();
+        void test_motors();
+        void test_manual_motor_movement();
         void test_connection_to_firebase();
 };
 
