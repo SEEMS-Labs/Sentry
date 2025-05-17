@@ -83,7 +83,7 @@ void poll_US_task(void *pvSensorManager) {
                     frontSensor->getLastBufferAverage(), 
                     frontSensor->averageBuffer());
             }
-            /*
+            //*
             if(backSensor->isActive() && readingGood[B_US_ID]) {
                 Serial.printf("Back\t Current reading: %.2f, LBA: %f, CBA:%f\n", 
                     backSensor->getDistanceReading(), 
@@ -102,7 +102,7 @@ void poll_US_task(void *pvSensorManager) {
                 rightSensor->getLastBufferAverage(), 
                 rightSensor->averageBuffer());
             }
-            */
+            //*/
         }
     
         // Get thresholds breached for each sensor.
@@ -155,7 +155,7 @@ void poll_US_task(void *pvSensorManager) {
                                                 (f_pd_strength << F_HPE_LSB);
                     xSemaphoreGive(alert_buffer_mutex);
                 }
-                if(PRINT_US_TEST) Serial.printf("\t\t[Strength: 0x%x]Front: %.2f in. < %.2f in.\n", f_pd_strength, frontSensor->getDistanceReading(), frontSensor->getHpeThreshold());
+                if(PRINT_US_ERR) Serial.printf("\t\t[Strength: 0x%x]Front: %.2f in. < %.2f in.\n", f_pd_strength, frontSensor->getDistanceReading(), frontSensor->getHpeThreshold());
                 
                 if(PRINT_US_ERR) {
                     if(hpeChangeDetected) Serial.printf("\t✨Change in Presence Detected: AlertPacket: (0x%x). DecodedFront: 0x%x\n", alertInfoPacket->motion, f_pd_strength);
@@ -191,17 +191,14 @@ void poll_US_task(void *pvSensorManager) {
             obsDetectionPacket->leftObstacleDetected = currSensorBreached[L_US_ID];
             obsDetectionPacket->rightObstacleDetected = currSensorBreached[R_US_ID];
 
-            // Notify tasks.
+            // Notify task.
             if(obsBreachDetected) {
-                // Notify random walk task.
-                if(currMvmtState == MovementState::ms_AUTONOMOUS) 
-                    if(erw_mvmt_handle != NULL) xTaskNotify(erw_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
-                    else Serial.println("Failed to notify erw_mvmt_task. Task likely not initialized.");
 
-                // Notify user controlled movement task.
-                else if(currMvmtState == MovementState::ms_MANUAL) 
-                    if(user_ctrld_mvmt_handle != NULL) xTaskNotify(user_ctrld_mvmt_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
-                    else Serial.println("Failed to notify user_ctrld_mvmt_task. Task likely not initialized.");
+                // Notify motor emergency stop task.
+                if(obs_detect_stop_handle != NULL) xTaskNotify(obs_detect_stop_handle, OBSTACLE_THRESHOLD_BREACHED, eSetBits);
+                else Serial.println("Failed to notify obs_detect_stop_handle. Task lkely not initialized.");
+
+
             }
         }
 

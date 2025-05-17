@@ -1,0 +1,3 @@
+The "platformio.ini.txt" file should be renamed to "platformio.ini" and copied to the main
+root directory of the project (i.e., it should be in the same located in the same place as the .pio, .lib, 
+and .include folders of the project).

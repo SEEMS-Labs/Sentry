@@ -30,7 +30,7 @@ class Motor {
         const int currentMonitor;   // Current Monitoring Pin.
         
         int speed = 0;              // Speed motor should be driving in.
-        float currLim = 200.0;     // Current limit through motor in milli-Amps.
+        float currLim = 2000.0;      // Current limit through motor in milli-Amps.
         bool enabled = false;       // Motor enable pin status.
         bool isSwitching = false;   // Motor direction switching status for cases where the motor stops but experiences overcurrent.
         ulong onTime = 0;           // Time (in ms) that the motor turned on from rest.

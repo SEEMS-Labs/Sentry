@@ -5,31 +5,30 @@
 
 #include <Arduino.h>
 
-#define EE2_TEST_MODE 0     // To override certain function flows for testing purposes.
-#define SERIAL_ONLY_MODE 0  // Mode to deal with things only via the serial terminal and no wi-fi.
-#define MVMT_ACTIVE 0       // Mode to deal with movement being used.
-#define USE_HPE_DEF_THD 1   // Mode to use default hpe threshold in code, not on esp32 memory.
-#define PRINT_US_ERR 0      // Mode to print the debug outputs of US sensor related things.
+#define EE2_TEST_MODE 0         // To override certain function flows for testing purposes.
+#define SERIAL_ONLY_MODE 1      // Mode to deal with things only via the serial terminal and no wi-fi.
+#define MVMT_ACTIVE 1           // Mode to deal with movement being used.
+#define USE_HPE_DEF_THD 1       // Mode to use default hpe threshold in code, not on esp32 memory.
+#define PRINT_US_ERR 0          // Mode to print the debug outputs of US sensor related things.
 #define PRINT_US_TEST 0
+#define LAZY_CONTROLLER_MODE 1  // Mode to override certain checks within the controller.
+#define CAMERA_ON 1
 
 // Serial Monitor Constants.
 #define BAUD_RATE 115200
 #define ONE_SECOND 1000
 
 // Test Wifi. (Covered via BLE communication).
-#define WIFI_SSID_t "SEEMS"
-#define WIFI_PASSWORD_t "@Ucf2025"
-
-//#define WIFI_SSID "DIRECT-67-Pixel 6-PdaNet"
-//#define WIFI_PASSWORD "Keurs8ha"
+#define WIFI_SSID_t "*********"
+#define WIFI_PASSWORD_t "*********"
 
 // Test Firebase authentication. (To be covered via BLE Communication).
-#define USER_EMAIL "es849112@ucf.edu"       // ee2@seems.com
-#define USER_PASSWORD "rCpnKBR4ZhtefmL"     // @Ucf2025
+#define USER_EMAIL "*********"       
+#define USER_PASSWORD "*********"  
 
 // Firebase RTDB Keys/Urls.
-#define API_KEY "AIzaSyAGnxeU6342_TcjpmTKPT_WjB4AVTODfMk"
-#define DATABASE_URL "https://seems-hub-default-rtdb.firebaseio.com/"
+#define API_KEY "*********"
+#define DATABASE_URL "*********"
 
 /*********************************************************
     SENSOR PIN DEFINITONS AND DEFAULT THRESHOLD LEVELS
@@ -60,19 +59,19 @@
 #define DEF_MIC_LEVEL_LIM 50    // Microphone Noise Level Threshold (in dB).
 
 // Motors and Motor Drivers.
-#define L_ENC_A     18      // Left Motor Encoder Output A.
-#define L_ENC_B     21      // Left Motor Encoder Output B.
-#define L_MOT_EN    4       // Left Motor Driver Enable Input Pin.
-#define L_MOT_PWM1  5       // Left Motor Driver Direction Input Pin.
-#define L_MOT_PWM2  6       // Left Motor Driver PWM Input Pin.
-#define L_MOT_DIAG  7       // Left Motor Driver Fault Output Pin.
+#define L_ENC_A     17      // Left Motor Encoder Output A.
+#define L_ENC_B     16      // Left Motor Encoder Output B.
+#define L_MOT_EN    18      // Left Motor Driver Enable Input Pin.
+#define L_MOT_PWM1  11      // Left Motor Driver Direction Input Pin.
+#define L_MOT_PWM2  8       // Left Motor Driver PWM Input Pin.
+#define L_MOT_DIAG  12      // Left Motor Driver Fault Output Pin.
 #define L_MOT_OCM   9       // Left Motor Driver Current Sense Output Pin.
-#define R_ENC_A     47      // Right Motor Encoder Output A.
+#define R_ENC_A     38      // Right Motor Encoder Output A.
 #define R_ENC_B     48      // Right Motor Encoder Output B.
-#define R_MOT_EN    39      // Right Motor Driver Enable Input Pin.
-#define R_MOT_PWM1  40      // Right Motor Driver Direction Input Pin.
-#define R_MOT_PWM2  41      // Right Motor Driver PWM Input Pin.
-#define R_MOT_DIAG  42      // Right Motor Driver Fault Output Pin.
+#define R_MOT_EN    13      // Right Motor Driver Enable Input Pin.
+#define R_MOT_PWM1  21      // Right Motor Driver Direction Input Pin.
+#define R_MOT_PWM2  14      // Right Motor Driver PWM Input Pin.
+#define R_MOT_DIAG  47      // Right Motor Driver Fault Output Pin.
 #define R_MOT_OCM   10      // Right Motor Driver Current Sense Output Pin.
 
 /*********************************************************
@@ -107,15 +106,17 @@
 /*********************************************************
                 MOTOR DEFAULTS
 **********************************************************/
-#define DEFAULT_SPEED 200
+#define DEFAULT_SPEED 255
+#define TURNING_SPEED 170
+#define ERW_STEP_LENGTH 5          // in seconds.
 
 /*********************************************************
             COMMUNICATION CONFIGURATION
 **********************************************************/
 #define FB_CONN_TIMEOUT_PERIOD 15000 
 
-#define FB_SENTRY_CONN      ((String) "sentry/camera/ip")
-#define FB_SENTRY__CAM_IP   ((String) "sentry/camera/ip") 
+#define FB_SENTRY_CONN      ((String) "sentry/sentry_conn")
+#define FB_SENTRY_CAM_IP    ((String) "sentry/camera/ip") 
 #define FB_ENV_DATA_ADDRESS ((String) "sentry/readings/")
 #define FB_ALERTS_ADDRESS   ((String) "sentry/alerts/")
 
@@ -221,11 +222,12 @@ struct _userSentryConfig {
  */
 enum SL_ctrlInfo {
     JOYSTICK_MASK =  0x02FF,    // Mask for retrieving Joystick coordinate information from the Sentrylink controller address.
-    CD_STA_MASK = 0x0003,       // Mask for retrieving Dpad and Controller state from the Sentrylink controller address.
+    CTRL_STA_MASK = 0x0003,     // Mask for retrieving Controller state from the Sentrylink controller address.
+    DPAD_STA_MASK = 0x0003,     // Mask for retrieving Dpad state from the Sentrylink controller address.
     ACTIVE_MASK = 0x0001,       // Mask for retrieving Controller active status from the Sentrylink controller address.
     JSTK_Y_LSB = 15,            // LSB of the Joystick Y Coordinates field within Sentrylink controller address.
     JSTK_X_LSB = 5,             // LSB of the Joystick X Coordinates field within Sentrylink controller address.
-    DPAD_STA_LSB = 2,           // LSB of the Dpad field within Sentrylink controller address.
+    DPAD_STA_LSB = 3,           // LSB of the Dpad field within Sentrylink controller address.
     CTRL_STA_LSB = 1,           // LSB of the controller configuration field within Sentrylink controller address.
     ACTIVE_LSB = 0,             // LSB of the controller activity field within Sentrylink controller address.
     DPAD_L = 0,                 // Decimal value of Dpad Field if Left is selected.
@@ -327,8 +329,8 @@ extern TaskHandle_t rx_user_data_handle;        // Task handle to receive user c
 extern TaskHandle_t user_ctrld_mvmt_handle;     // Task handle to control motors via user direction.
 extern TaskHandle_t erw_mvmt_handle;            // Task handle to control motors via Enhanced Random Walk algo.
 extern TaskHandle_t monitor_ocm_handle;         // Task handle to read the current monitoring pins of the drive system.
-extern TaskHandle_t monitor_diag_handle;        // Task handle to read the diagnostic pins of the drive system.
-
+extern TaskHandle_t obs_detect_stop_handle;     // Task handle to read the diagnostic pins of the drive system.
+extern TaskHandle_t mvmt_manager_handle;        // Task handle to deal with movement states.
 
 // Size of the stack allocated on the heap to a task (in bytes).
 enum TaskStackDepth {

@@ -19,10 +19,13 @@ const uint8_t dev_S3_A[] = {0x24, 0xEC, 0x4A, 0x09, 0xC8, 0x00};
 const uint8_t dev_S3_B[] = {0x24, 0xEC, 0x4A, 0x09, 0xC8, 0x00};
 const uint8_t Seems_PCB_V1[] = {0xFC, 0xE8, 0xC0, 0xCD, 0xA3, 0xCC};
 const uint8_t Seems_PCB_V2[] = {0x24, 0xEC, 0x4A, 0x09, 0xC8, 0x00};
+const uint8_t Seems_PCB_V2_Weeks[]  = {0xD8, 0x3B, 0xDA, 0x72, 0xD5, 0x80};
+const uint8_t SEEMS_PCB_V2_Untouched[] = {0x48, 0xCA, 0x43, 0x09, 0x5E, 0x70};                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
 
 // ESP32-CAM Mac addresses.
 const uint8_t dev_Cam_A[] = {0xFC, 0xE8, 0xC0, 0xCD, 0xA3, 0xCC};
 const uint8_t dev_Cam_B[] = {0xFC, 0xE8, 0xC0, 0xCD, 0xA3, 0xCC};
+const uint8_t dev_Cam_C[] = {0x78, 0x42, 0x1c, 0x6d, 0xbd, 0xa4};
 const uint8_t dev_Cam_D[] = {0x78, 0x42, 0x1C, 0x6D, 0x9F, 0xD4};
 
 enum _header : uint8_t {
